@@ -10,13 +10,19 @@ app.use(cors());
 app.use(express.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
+/*const db = mysql.createPool({
+    host: '192.168.0.103',
+    user: 'rtalo',
+    password: 'admin12#',
+    database: 'farmsys',
+    port:3306
+}); */
 const db = mysql.createPool({
     host: 'localhost',
     user: 'root',
     password: 'root',
-    database: 'thesis',
+    database: 'farmsys',
 });
-
 db.getConnection(function (err) {
     if (err) {
         return console.error('error: ' + err.message);
@@ -186,7 +192,6 @@ app.post("/plantutilitiesplantprofileadd", (req,res) => {
     db.query(sqlInsertsplantprofile,[plantprofilename], (err, result) =>{
         console.log(result);
     })
-    
 })
 app.get("/plantutilitiesplanttype", (req,res) => {
     const sqlSelectplanttype = "SELECT * FROM plantutilitiesplanttypeprofiles;"
@@ -572,9 +577,178 @@ app.put('/ownersupdate', (req,res) => {
         if (err) console.log(err);
     });
 })
-
-
-
+app.get("/plantbatchlist/:batch_status", (req,res) => {
+    const batch_status = req.params.batch_status;
+    const sqlSelectbatch = "SELECT * FROM plant_batch INNER JOIN plant_profile ON plant_batch.plant_id = plant_profile.plant_id WHERE plant_batch.batch_status = ?;"
+    db.query(sqlSelectbatch, batch_status, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/plantbatchlistlatestinfo", (req,res) => {
+    const sqlSelectbatchlatestinfo = "SELECT * FROM plant_monitoring WHERE activities_id IN ( SELECT MAX(activities_id) FROM plant_monitoring GROUP BY batch_id);"
+    db.query(sqlSelectbatchlatestinfo, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/plantbatchinfo/:batch_id", (req,res) => {
+    const batch_id = req.params.batch_id;
+    const sqlSelectbatchinfo = "SELECT * FROM plant_batch WHERE batch_id = ?;"
+    db.query(sqlSelectbatchinfo,batch_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/plantbatchadd", (req,res) => {
+    const plantid = req.body.plantid
+    const batchstatus = req.body.batchstatus
+    const periodstart = req.body.periodstart
+    const periodend = req.body.periodend
+    const quantity = req.body.quantity
+    const measurement = req.body.measurement
+    const sqlInsertplantbatch= "INSERT INTO plant_batch (plant_id, batch_status, farm_period_start, expected_harvest_period, quantity, measurement) VALUES (?,?,?,?,?,?);"
+    db.query(sqlInsertplantbatch,[plantid, batchstatus, periodstart, periodend, quantity, measurement], (err, result) =>{
+        console.log(result);
+    })
+})
+app.put('/plantbatchedit', (req,res) => {
+    const batch_id = req.body.batch_id
+    const batch_status = req.body.batch_status
+    const newsqlplantbatchupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
+    db.query(newsqlplantbatchupdate, [batch_status, batch_id], (err, result) => {
+        if (err) console.log(err);
+        console.log(batch_id)
+        console.log(batch_status)
+    });
+})
+app.p
+app.post("/harvestcalendarmonitoringadd", (req,res) => {
+    const batch_id = req.body.batch_id
+    const plant_stage = req.body.plant_stage
+    const date_from = req.body.date_from
+    const date_to = req.body.date_to
+    const survival_rate = req.body.survival_rate
+    const remarks = req.body.remarks
+    const curr_height = req.body.curr_height
+    const curr_width = req.body.curr_width
+    const quantity = req.body.quantity
+    const act_increment = req.body.act_increment
+    const sqlInsertplantharvestcalendarmonitoring= "INSERT INTO plant_monitoring (batch_id, plant_stage, date_from, date_to, survival_rate, remarks, curr_height, curr_width, quantity, act_increment) VALUES (?,?,?,?,?,?,?,?,?,?);"
+    db.query(sqlInsertplantharvestcalendarmonitoring,[batch_id, plant_stage, date_from, date_to, survival_rate, remarks, curr_height, curr_width, quantity, act_increment], (err, result) =>{
+        
+    })
+})
+app.get('/harvestcalendar/:batch_id', (req, res) => {
+    const batch_id = req.params.batch_id;
+    const sqlharvestcalendarview = "SELECT * FROM plant_monitoring WHERE batch_id = ?;"
+    db.query(sqlharvestcalendarview, batch_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get("/harvestmonitoring/:batch_id", (req,res) => {
+    const batch_id = req.params.batch_id;
+    const sqlSelectharvestmonitoring = "SELECT * FROM plant_monitoring WHERE batch_id = ? ORDER BY act_increment DESC LIMIT 1;"
+    db.query(sqlSelectharvestmonitoring,batch_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/harvestmonitoringevent/:batch_id/:act_increment", (req,res) => {
+    const batch_id = req.params.batch_id;
+    const act_increment = req.params.act_increment;
+    const sqlSelectharvestmonitoring = "SELECT * FROM plant_monitoring WHERE batch_id = ? and act_increment = ? ORDER BY act_increment DESC LIMIT 1;"
+    db.query(sqlSelectharvestmonitoring,[batch_id, act_increment], (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/harvestinputdiseases/:batch_id", (req,res) => {
+    const batch_id = req.params.batch_id;
+    const sqlSelectbatchdiseases = "SELECT disease_id, diseases, quantity FROM plant_possible_disease INNER JOIN plant_batch ON plant_possible_disease.plant_id=plant_batch.plant_id WHERE plant_batch.batch_id = ?;"
+    db.query(sqlSelectbatchdiseases, batch_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/harvestinputdiseasesadd", (req,res) => {
+    const disease_id = req.body.disease_id
+    const activities_id = req.body.activities_id
+    const act_increment = req.body.act_increment
+    const num_of_plants_affected = req.body.num_of_plants_affected
+    const date_occured = req.body.date_occured
+    const disease_desc = req.body.disease_desc
+    const dis_status = req.body.dis_status
+    const sqlInsertharvestdiseases= "INSERT INTO plant_actual_disease (disease_id, activities_id, act_increment, num_of_plants_affected, date_occured, disease_desc, dis_status) VALUES (?,?,?,?,?,?,?);"
+    db.query(sqlInsertharvestdiseases,[disease_id, activities_id, act_increment, num_of_plants_affected, date_occured, disease_desc, dis_status], (err, result) =>{
+        if (err) console.log(err)
+    })
+})
+app.get('/harvestdiseaseslist/:batch_id', (req, res) => {
+    const batch_id = req.params.batch_id;
+    const sqlharvestdiseaseslist = "SELECT disease_act_id, num_of_plants_affected, date_occured, date_cured, disease_desc, dis_status, batch_id FROM plant_actual_disease INNER JOIN plant_monitoring ON plant_actual_disease.activities_id=plant_monitoring.activities_id WHERE plant_monitoring.batch_id = ?;"
+    db.query(sqlharvestdiseaseslist, batch_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get('/harvestdiseasesinfo/:disease_act_id', (req, res) => {
+    const disease_act_id = req.params.disease_act_id;
+    const sqlharvestdiseaseinfo = "SELECT * FROM plant_actual_disease WHERE disease_act_id = ?;"
+    db.query(sqlharvestdiseaseinfo, disease_act_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.put('/harvestdiseaseupdate', (req,res) => {
+    const disease_act_id = req.body.disease_act_id
+    const num_of_plants_affected = req.body.num_of_plants_affected
+    var date_cured = req.body.date_cured
+    const disease_desc = req.body.disease_desc
+    const dis_status = req.body.dis_status
+    const newsqlharvestdiseaseupdate = "UPDATE plant_actual_disease SET num_of_plants_affected = ?, date_cured = ?, disease_desc = ?, dis_status = ? WHERE disease_act_id = ?";
+    if (dis_status == "Active"){
+        date_cured = ""
+    }
+    else if (dis_status == "Cured"){
+        date_cured = date_cured
+    }
+    db.query(newsqlharvestdiseaseupdate, [num_of_plants_affected, date_cured, disease_desc, dis_status, disease_act_id], (err, result) => {
+        if (err) console.log(err);
+        console.log("status: ",dis_status)
+        console.log("desc: ",disease_desc)
+    });
+})
+app.post("/harvestinputmortalities", (req,res) => {
+    const activities_id = req.body.activities_id
+    const batch_id = req.body.batch_id
+    const quantity_loss = req.body.quantity_loss
+    const units = req.body.units
+    const date = req.body.date
+    const sqlInsertharvestmortalities= "INSERT INTO mortalities (activities_id, batch_id, quantity_loss, units, date) VALUES (?,?,?,?,?);"
+    db.query(sqlInsertharvestmortalities,[activities_id, batch_id, quantity_loss, units, date], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+    })
+})
+app.get('/harvestmortalitiesinfo/:batch_id', (req, res) => {
+    const batch_id = req.params.batch_id;
+    const sqlharvestmortalitiesinfo = "SELECT * FROM mortalities WHERE batch_id = ?;"
+    db.query(sqlharvestmortalitiesinfo, batch_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get('/harvestactivitiesinfo/:activities_id', (req, res) => {
+    const activities_id = req.params.activities_id;
+    const sqlharvestactivitiesinfo = "SELECT * FROM plant_activities INNER JOIN employees ON plant_activities.emp_id=employees.emp_id WHERE activities_id = ?;"
+    db.query(sqlharvestactivitiesinfo, activities_id, (err, result) =>{
+        res.json(result);
+        if (err) console.log(err)
+    })
+})
+app.post("/harvestinputactivity", (req,res) => { //TO BE EDIT WITH INVENTORY CONNECTION
+    const activities_id = req.body.activities_id
+    const emp_id = req.body.emp_id
+    const activity = req.body.activity
+    const report = req.body.report
+    const sqlInsertharvestactivity= "INSERT INTO plant_activities (activities_id, emp_id, activity, report) VALUES (?,?,?,?);"
+    db.query(sqlInsertharvestactivity,[activities_id, emp_id, activity, report], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+    })
+})
 //crud test
 app.get("/api/get", (req,res) => {
     const sqlSelect = "SELECT * FROM movie_reviews;"
