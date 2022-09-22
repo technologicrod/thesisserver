@@ -749,6 +749,83 @@ app.post("/harvestinputactivity", (req,res) => { //TO BE EDIT WITH INVENTORY CON
         console.log(result)
     })
 })
+app.post("/harvestbatchinput", (req,res) => {
+    const batch_id = req.body.batch_id
+    const batch_img = req.body.batch_img
+    const batch_vid = req.body.batch_vid
+    const date_harvested = req.body.date_harvested
+    const batch_quality = req.body.batch_quality
+    const remarks = req.body.remarks
+    const batch_status = req.body.batch_status
+    const sqlInsertharvestbatch = "INSERT INTO batch_harvest (batch_id, batch_img, batch_vid, date_harvested, batch_quality, remarks, batch_status) VALUES (?,?,?,?,?,?,?);"
+    const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
+    db.query(sqlInsertharvestbatch,[batch_id, batch_img, batch_vid, date_harvested, batch_quality, remarks, batch_status], (err, result) =>{
+        console.log(result);
+    })
+    db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
+        console.log(batch_id)
+        console.log(batch_status)
+    });
+})
+app.get('/harvestinventoryonsalebatches', (req, res) => {
+    const sqlharvestonsaleinfo = "SELECT * FROM batch_harvest;"
+    db.query(sqlharvestonsaleinfo, (err, result) =>{
+        res.json(result);
+    })
+})
+app.post("/harvestinputvariations", (req,res) => {
+    const harvest_id = req.body.harvest_id
+    const a_grade = req.body.a_grade
+    const a_quantity_harvested = req.body.a_quantity_harvested
+    const a_units = req.body.a_units
+    const a_price_per_unit = req.body.a_price_per_unit
+    const b_grade = req.body.b_grade
+    const b_quantity_harvested = req.body.b_quantity_harvested
+    const b_units = req.body.b_units
+    const b_price_per_unit = req.body.b_price_per_unit
+    const c_grade = req.body.c_grade
+    const c_quantity_harvested = req.body.c_quantity_harvested
+    const c_units = req.body.c_units
+    const c_price_per_unit = req.body.c_price_per_unit
+    const d_grade = req.body.d_grade
+    const d_quantity_harvested = req.body.d_quantity_harvested
+    const d_units = req.body.d_units
+    const d_price_per_unit = req.body.d_price_per_unit
+    const sqlInsertvariations = "INSERT INTO batch_quantity_variations (harvest_id, grade, quantity_harvested, units, price_per_unit) VALUES (?,?,?,?,?);"
+    if (a_quantity_harvested, a_units, a_price_per_unit != ""){
+        db.query(sqlInsertvariations,[harvest_id, a_grade, a_quantity_harvested, a_units, a_price_per_unit], (err, result) =>{
+            console.log(result);
+        })
+    }
+    if (b_quantity_harvested, b_units, b_price_per_unit != ""){
+        db.query(sqlInsertvariations,[harvest_id, b_grade, b_quantity_harvested, b_units, b_price_per_unit], (err, result) =>{
+            console.log(result);
+        })
+    }
+    if (c_quantity_harvested, c_units, c_price_per_unit != ""){
+        db.query(sqlInsertvariations,[harvest_id, c_grade, c_quantity_harvested, c_units, c_price_per_unit], (err, result) =>{
+            console.log(result);
+        })
+    }
+    if (d_quantity_harvested, d_units, d_price_per_unit != ""){
+        db.query(sqlInsertvariations,[harvest_id, d_grade, d_quantity_harvested, d_units, d_price_per_unit], (err, result) =>{
+            console.log(result);
+        })
+    }
+})
+app.get('/harvestvariationsinfo/:harvest_id', (req, res) => {
+    const harvest_id = req.params.harvest_id;
+    const sqlharvestvariationsinfo = "SELECT * FROM batch_quantity_variations WHERE harvest_id = ?;"
+    db.query(sqlharvestvariationsinfo, harvest_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get('/harvestvariationslist', (req, res) => {
+    const sqlharvestvariationslist = "SELECT * FROM batch_quantity_variations;"
+    db.query(sqlharvestvariationslist, (err, result) =>{
+        res.json(result);
+    })
+})
 //crud test
 app.get("/api/get", (req,res) => {
     const sqlSelect = "SELECT * FROM movie_reviews;"
@@ -764,7 +841,6 @@ app.post("/api/insert", (req,res) => {
     db.query(sqlInsert,[movieName, movieReview], (err, result) =>{
         console.log(result);
     })
-    
 })
 
 app.delete('/api/delete/:movieName', (req,res) => {
