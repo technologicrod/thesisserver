@@ -16,7 +16,7 @@ app.use(bodyParser.urlencoded({extended: true}));
     password: 'root',
     database: 'farmsys',
     port:3306
-});*/
+}); */
 const db = mysql.createPool({
     host: 'localhost',
     user: 'root',
@@ -104,7 +104,7 @@ app.get('/employeelistpositionhistory/:employeeid', (req, res) => {
 })
 app.get('/employeelistpositionhistorydata/:employeeid', (req, res) => {
     const employeeid = req.params.employeeid;
-    const sqlemployeeview = "SELECT * from employee_position_history WHERE emp_id = ? ORDER BY date_given DESC ;"
+    const sqlemployeeview = "SELECT * from employee_position_history WHERE emp_id = ?;"
     db.query(sqlemployeeview, employeeid, (err, result) =>{
         res.json(result);
         console.log(result)
@@ -124,7 +124,7 @@ app.get('/employeelisteditaddress/:employeeid', (req, res) => {
         res.json(result);
     })
 })
-app.put('/employeelistupdate', async function (req,res) {
+app.put('/employeelistupdate', (req,res) => {
     const emp_id = req.body.emp_id
     const employeename = req.body.employeename
     const employeefarm = req.body.employeefarm
@@ -140,45 +140,15 @@ app.put('/employeelistupdate', async function (req,res) {
     const newsqlemployeeupdate = "UPDATE employees SET farm_id = ?, emp_name = ?, contact_num = ?, educational_attainment = ?, emp_pos = ?, emp_status = ? WHERE emp_id = ?";
     const newsqlemployeeaddress = "UPDATE address SET lot = ?, street = ?, city = ?, province = ?, zipcode= ? WHERE emp_id = ?";
     const sqlInsertemployeeposition = "INSERT INTO employee_position_history (emp_id, emp_position, emp_status) VALUES (?,?,?);"
-    const sqlcheckposhistory = "SELECT * FROM employee_position_history WHERE emp_id = ? ORDER BY date_given DESC LIMIT 1;"
-    var oldpos, oldstatus
     db.query(newsqlemployeeupdate, [employeefarm, employeename, employeecontact, employeeeducationalattainment, employeeposition, employeestatus, emp_id], (err, result) => {
         if (err) console.log(err);
     });
     db.query(newsqlemployeeaddress, [employeelot, employeestreet, employeecity, employeeprovince, employeezipcode, emp_id], (err, result) => {
         if (err) console.log(err);
     });
-    function getpos(){
-        return new Promise ((resolve, reject) => {
-            db.query(sqlcheckposhistory,[emp_id], (err, result) =>{
-                if (err) {
-                    reject(err);
-                  }
-                  else {
-                    resolve(result[0].emp_position);
-                  }
-            })
-        })
-    }
-    function getstatus(){
-        return new Promise ((resolve, reject) => {
-            db.query(sqlcheckposhistory,[emp_id], (err, result) =>{
-                if (err) {
-                    reject(err);
-                  }
-                  else {
-                    resolve(result[0].emp_status);
-                  }
-            })
-        })
-    }
-    oldpos = await getpos();
-    oldstatus = await getstatus();
-    if (oldpos != employeeposition || oldstatus != employeestatus) {
-        db.query(sqlInsertemployeeposition,[emp_id, employeeposition, employeestatus], (err, result) =>{
-            if (err) console.log(err);
-        })
-    }
+    db.query(sqlInsertemployeeposition,[emp_id, employeeposition, employeestatus], (err, result) =>{
+        if (err) console.log(err);
+    })
 })
 app.put('/employeeidpicupdate', (req,res) => {
     const employeeid = req.body.employeeid
@@ -611,13 +581,6 @@ app.put('/ownersupdate', (req,res) => {
 })
 app.get("/plantbatchlist/:batch_status", (req,res) => {
     const batch_status = req.params.batch_status;
-    const sqlSelectbatch = "SELECT * FROM plant_batch INNER JOIN plant_profile ON plant_batch.plant_id = plant_profile.plant_id WHERE plant_batch.batch_status = ?;"
-    db.query(sqlSelectbatch, batch_status, (err, result) =>{
-        res.send(result);
-    })
-})
-app.get("/harvestbatchlist/:batch_status", (req,res) => {
-    const batch_status = req.params.batch_status;
     const sqlSelectbatch = "SELECT * FROM batch_harvest INNER JOIN plant_batch ON batch_harvest.batch_id = plant_batch.batch_id INNER JOIN plant_profile ON plant_batch.plant_id=plant_profile.plant_id WHERE batch_harvest.batch_status = ?;"
     db.query(sqlSelectbatch, batch_status, (err, result) =>{
         res.send(result);
@@ -627,13 +590,6 @@ app.get("/harvestbatchlist/:batch_status", (req,res) => {
 app.get("/plantbatchlistlatestinfo", (req,res) => {
     const sqlSelectbatchlatestinfo = "SELECT * FROM plant_monitoring WHERE activities_id IN ( SELECT MAX(activities_id) FROM plant_monitoring GROUP BY batch_id);"
     db.query(sqlSelectbatchlatestinfo, (err, result) =>{
-        res.send(result);
-    })
-})
-app.get("/plantbatchlatestinfo/:batch_id", (req,res) => {
-    const batch_id = req.params.batch_id
-    const sqlSelectbatchlatestinfo = "SELECT * FROM plant_monitoring WHERE activities_id IN ( SELECT MAX(activities_id) FROM plant_monitoring GROUP BY batch_id) AND batch_id = ?;"
-    db.query(sqlSelectbatchlatestinfo, batch_id, (err, result) =>{
         res.send(result);
     })
 })
@@ -732,7 +688,6 @@ app.get('/harvestdiseaseslist/:batch_id', (req, res) => {
         res.json(result);
     })
 })
-
 app.get('/harvestdiseasesinfo/:disease_act_id', (req, res) => {
     const disease_act_id = req.params.disease_act_id;
     const sqlharvestdiseaseinfo = "SELECT * FROM plant_actual_disease WHERE disease_act_id = ?;"
@@ -809,6 +764,7 @@ app.post("/harvestbatchinput", (req,res) => {
     const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
     db.query(sqlInsertharvestbatch,[batch_id, batch_img, batch_vid, date_harvested, batch_quality, remarks, batch_status], (err, result) =>{
         console.log(result);
+        if (err) console.log(err)
     })
     db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
         console.log(batch_id)
@@ -848,27 +804,26 @@ app.post("/harvestinputvariations", (req,res) => {
     const d_price_per_unit = req.body.d_price_per_unit
     const batch_status = req.body.batch_status
     const batch_id = req.body.batch_id
-    const var_status = "Active"
-    const sqlInsertvariations = "INSERT INTO batch_quantity_variations (harvest_id, grade, quantity_harvested, units, price_per_unit, var_status) VALUES (?,?,?,?,?,?);"
+    const sqlInsertvariations = "INSERT INTO batch_quantity_variations (harvest_id, grade, quantity_harvested, units, price_per_unit) VALUES (?,?,?,?,?);"
     const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
     const sqlInsertharveststatusupdateinharvest = "UPDATE batch_harvest SET batch_status = ?  WHERE harvest_id = ?";
     if (a_quantity_harvested, a_units, a_price_per_unit != ""){
-        db.query(sqlInsertvariations,[harvest_id, a_grade, a_quantity_harvested, a_units, a_price_per_unit, var_status], (err, result) =>{
+        db.query(sqlInsertvariations,[harvest_id, a_grade, a_quantity_harvested, a_units, a_price_per_unit], (err, result) =>{
             console.log(result);
         })
     }
     if (b_quantity_harvested, b_units, b_price_per_unit != ""){
-        db.query(sqlInsertvariations,[harvest_id, b_grade, b_quantity_harvested, b_units, b_price_per_unit, var_status], (err, result) =>{
+        db.query(sqlInsertvariations,[harvest_id, b_grade, b_quantity_harvested, b_units, b_price_per_unit], (err, result) =>{
             console.log(result);
         })
     }
     if (c_quantity_harvested, c_units, c_price_per_unit != ""){
-        db.query(sqlInsertvariations,[harvest_id, c_grade, c_quantity_harvested, c_units, c_price_per_unit, var_status], (err, result) =>{
+        db.query(sqlInsertvariations,[harvest_id, c_grade, c_quantity_harvested, c_units, c_price_per_unit], (err, result) =>{
             console.log(result);
         })
     }
     if (d_quantity_harvested, d_units, d_price_per_unit != ""){
-        db.query(sqlInsertvariations,[harvest_id, d_grade, d_quantity_harvested, d_units, d_price_per_unit, var_status], (err, result) =>{
+        db.query(sqlInsertvariations,[harvest_id, d_grade, d_quantity_harvested, d_units, d_price_per_unit], (err, result) =>{
             console.log(result);
         })
     }
@@ -881,225 +836,18 @@ app.post("/harvestinputvariations", (req,res) => {
         console.log(batch_status)
     });
 })
-app.get('/harvestvariationsinfo/:harvest_id/:var_status', (req, res) => {
+app.get('/harvestvariationsinfo/:harvest_id', (req, res) => {
     const harvest_id = req.params.harvest_id;
-    const var_status = req.params.var_status;
-    const sqlharvestvariationsinfo = "SELECT * FROM batch_quantity_variations WHERE harvest_id = ? and var_status = ?;"
-    db.query(sqlharvestvariationsinfo, [harvest_id, var_status], (err, result) =>{
+    const sqlharvestvariationsinfo = "SELECT * FROM batch_quantity_variations WHERE harvest_id = ?;"
+    db.query(sqlharvestvariationsinfo, harvest_id, (err, result) =>{
         res.json(result);
     })
 })
-app.get('/harvestvariationslist/:var_status', (req, res) => {
-    const var_status = req.params.var_status;
-    const sqlharvestvariationslist = "SELECT * FROM batch_quantity_variations INNER JOIN batch_harvest ON batch_quantity_variations.harvest_id=batch_harvest.harvest_id INNER JOIN plant_batch ON batch_harvest.batch_id=plant_batch.batch_id INNER JOIN plant_profile ON plant_batch.plant_id=plant_profile.plant_id WHERE var_status = ?;"
-    db.query(sqlharvestvariationslist, var_status, (err, result) =>{
+app.get('/harvestvariationslist', (req, res) => {
+    const sqlharvestvariationslist = "SELECT * FROM batch_quantity_variations;"
+    db.query(sqlharvestvariationslist, (err, result) =>{
         res.json(result);
     })
-})
-app.post("/iteminventoryadd", (req,res) => {
-    const supply_name = req.body.supply_name
-    const farm_id = req.body.farm_id
-    const units = req.body.units
-    const perishability = req.body.perishability
-    const re_order_lvl = req.body.re_order_lvl
-    const description = req.body.description
-    const quantity = req.body.quantity
-    const sqlInsertiteminventory= "INSERT INTO supplies (farm_id, supply_name, units, description, perishability, re_order_lvl, quantity) VALUES (?,?,?,?,?,?,?);"
-    db.query(sqlInsertiteminventory,[farm_id, supply_name, units, description, perishability, re_order_lvl, quantity], (err, result) =>{
-        if (err) console.log(err)
-        console.log(result)
-    })
-})
-app.get('/iteminventory', (req, res) => {
-    const sqliteminfo = "SELECT * FROM supplies;"
-    db.query(sqliteminfo, (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/iteminventoryinfo/:supply_id', (req, res) => {
-    const supply_id = req.params.supply_id
-    const sqliteminfo = "SELECT * FROM supplies WHERE supply_id = ?;"
-    db.query(sqliteminfo, supply_id, (err, result) =>{
-        res.json(result);
-        if (err) console.log (err)
-    })
-})
-app.put('/iteminventoryupdate', (req,res) => {
-    const supply_id = req.body.supply_id
-    const supply_name = req.body.supply_name
-    const farm_id = req.body.farm_id
-    const units = req.body.units
-    const perishability = req.body.perishability
-    const re_order_lvl = req.body.re_order_lvl
-    const description = req.body.description
-    const newsqlitemupdate = "UPDATE supplies SET supply_name = ?, farm_id = ?, units = ?, perishability = ?, re_order_lvl = ?, description = ? WHERE supply_id = ?";
-    db.query(newsqlitemupdate, [supply_name, farm_id, units, perishability, re_order_lvl, description, supply_id], (err, result) => {
-        if (err) console.log(err);
-    });
-})
-app.post('/suppliersadd', async function (req,res) {
-    const company_name = req.body.company_name;
-    const contact_person_name = req.body.contact_person_name
-    const position = req.body.position
-    const contact_num = req.body.contact_num
-    const contact_email = req.body.contact_email
-    const lot = req.body.lot
-    const street = req.body.street
-    const city = req.body.city
-    const province = req.body.province
-    const zipcode = req.body.zipcode
-    var supplier_id
-    const sqlsupplierprofile = "INSERT INTO supplier_profile (company_name) VALUES (?);"
-    const sqlInsertsupplieradress = "INSERT INTO address (supplier_id, lot, street, city, province, zipcode) VALUES (?,?,?,?,?,?);"
-    const sqlInsertsuppliercontact = "INSERT INTO contact_info (supplier_id, contact_person_name, position, contact_num, contact_email) VALUES (?,?,?,?,?);"
-    function addsupplier(){
-        return new Promise ((resolve, reject) => {
-            db.query(sqlsupplierprofile,[company_name], (err, result) =>{
-                if (err) {
-                    reject(err);
-                  }
-                  else {
-                    resolve(result.insertId);
-                  }
-            })
-        })
-    }
-    supplier_id = await addsupplier();
-    db.query(sqlInsertsupplieradress,[supplier_id, lot, street, city, province, zipcode], (err, result) =>{
-        if(err) console.log(err)
-    })
-    db.query(sqlInsertsuppliercontact,[supplier_id, contact_person_name, position, contact_num, contact_email], (err, result) =>{
-        if(err) console.log(err)
-    })
-})
-app.get('/supplierslist', (req, res) => {
-    const sqlsuppliersinfo = "SELECT * FROM supplier_profile;"
-    db.query(sqlsuppliersinfo, (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/addresslist', (req, res) => {
-    const sqladdressinfo = "SELECT * FROM address;"
-    db.query(sqladdressinfo, (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/contactinfolist', (req, res) => {
-    const sqlcontactinfo = "SELECT * FROM contact_info;"
-    db.query(sqlcontactinfo, (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/suppliersinfo/:supplier_id', (req, res) => {
-    const supplier_id = req.params.supplier_id
-    const sqlsuppliersinfo = "SELECT * FROM supplier_profile WHERE supplier_id = ?;"
-    db.query(sqlsuppliersinfo, supplier_id,  (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/addressinfo/:supplier_id', (req, res) => {
-    const supplier_id = req.params.supplier_id
-    const sqladdressinfo = "SELECT * FROM address WHERE supplier_id = ?;"
-    db.query(sqladdressinfo, supplier_id, (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/contactinfoinfo/:supplier_id', (req, res) => {
-    const supplier_id = req.params.supplier_id
-    const sqlcontactinfoinfo = "SELECT * FROM contact_info WHERE supplier_id = ?;"
-    db.query(sqlcontactinfoinfo, supplier_id, (err, result) =>{
-        res.json(result);
-    })
-})
-app.put('/suppliersupdate', (req,res) => {
-    const supplier_id = req.body.supplier_id
-    const company_name = req.body.company_name;
-    const contact_person_name = req.body.contact_person_name
-    const position = req.body.position
-    const contact_num = req.body.contact_num
-    const contact_email = req.body.contact_email
-    const lot = req.body.lot
-    const street = req.body.street
-    const city = req.body.city
-    const province = req.body.province
-    const zipcode = req.body.zipcode
-    const newsqlsupplier = "UPDATE supplier_profile SET company_name = ? WHERE supplier_id = ?";
-    const newsqlsupplieraddress = "UPDATE address SET lot = ?, street = ?, city = ?, province = ?, zipcode = ? WHERE supplier_id = ?";
-    const newsqlsuppliercontactinfo = "UPDATE contact_info SET contact_person_name = ?, position = ?, contact_num = ?, contact_email = ? WHERE supplier_id = ?";
-    db.query(newsqlsupplier, [company_name, supplier_id], (err, result) => {
-        if (err) console.log(err);
-    });
-    db.query(newsqlsupplieraddress, [lot, street, city, province, zipcode, supplier_id], (err, result) => {
-        if (err) console.log(err);
-    });
-    db.query(newsqlsuppliercontactinfo, [contact_person_name, position, contact_num, contact_email, supplier_id], (err, result) => {
-        if (err) console.log(err);
-    });
-})
-app.post("/purchaseorderadd", (req,res) => {
-    const supply_id = req.body.supply_id
-    const supplier_id = req.body.supplier_id
-    const quantity = req.body.quantity
-    const units = req.body.units
-    const price_per_unit = req.body.price_per_unit
-    const total_payment = req.body.total_payment
-    const status = req.body.status
-    const sqlInsertpurchaseorder= "INSERT INTO purchase_order (supply_id, supplier_id, po_quantity, units, price_per_unit, total_payment, status) VALUES (?,?,?,?,?,?,?);"
-    db.query(sqlInsertpurchaseorder,[supply_id, supplier_id, quantity, units, price_per_unit, total_payment, status], (err, result) =>{
-        if (err) console.log(err)
-        console.log(result)
-    })
-})
-app.get('/purchaseorderlistinfo/:status', (req, res) => {
-    const status = req.params.status
-    const sqlpolistinfo = "SELECT * FROM purchase_order INNER JOIN supplies ON purchase_order.supply_id=supplies.supply_id INNER JOIN supplier_profile ON purchase_order.supplier_id=supplier_profile.supplier_id WHERE status= ?;"
-    db.query(sqlpolistinfo, status, (err, result) =>{
-        res.json(result);
-    })
-})
-app.get('/purchaseorderinfo/:po_id', (req, res) => {
-    const po_id = req.params.po_id
-    const sqlpoinfo = "SELECT * FROM purchase_order WHERE po_id = ?;"
-    db.query(sqlpoinfo, po_id, (err, result) =>{
-        res.json(result);
-        if (err) console.log (err)
-    })
-})
-app.put('/purchaseorderupdate', (req,res) => {
-    const po_id = req.body.po_id
-    const status = req.body.status
-    const newsqlpoupdate = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
-    db.query(newsqlpoupdate, [status, po_id], (err, result) => {
-        if (err) console.log(err);
-    });
-})
-app.get('/purchaseorderinfogroup/:supplier_id/:status', (req, res) => {
-    const supplier_id = req.params.supplier_id
-    const status = req.params.status
-    const sqlpogrpinfo = "SELECT * FROM purchase_order INNER JOIN supplies ON purchase_order.supply_id=supplies.supply_id WHERE supplier_id = ? and status = ?;"
-    db.query(sqlpogrpinfo, [supplier_id, status], (err, result) =>{
-        res.json(result);
-        if (err) console.log (err)
-    })
-})
-app.post("/purchaseorderconfirmadd", (req,res) => {
-    const supplier_id = req.body.supplier_id
-    const poidlist = req.body.poidlist
-    const totalamount = req.body.totalamount
-    const newpoidlist = JSON.stringify(poidlist)
-    const status = "Confirmed"
-    const sqlInsertpoconfirmation= "INSERT INTO final_po (supplier_id, po_id_list, total_amount) VALUES (?,?,?);"
-    const sqlupdatepoconfirmation= "UPDATE purchase_order SET status = ? WHERE po_id = ?;"
-    db.query(sqlInsertpoconfirmation,[supplier_id, newpoidlist, totalamount], (err, result) =>{
-        if (err) console.log(err)
-        console.log(result)
-    })
-    for(let i = 0; i < poidlist.length; i++){
-        db.query(sqlupdatepoconfirmation,[status, poidlist[i]], (err, result) =>{
-            if (err) console.log(err)
-            console.log(result)
-        })
-    }
 })
 //crud test
 app.get("/api/get", (req,res) => {
