@@ -5,6 +5,7 @@ const multer = require('multer');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const { parse } = require('path');
 
 app.use(cors());
 app.use(express.json());
@@ -1067,9 +1068,13 @@ app.get('/purchaseorderinfo/:po_id', (req, res) => {
 })
 app.put('/purchaseorderupdate', (req,res) => {
     const po_id = req.body.po_id
+    const quantity = req.body.quantity
+    const units = req.body.units
+    const price_per_unit = req.body.price_per_unit
+    const total_payment = req.body.total_payment
     const status = req.body.status
-    const newsqlpoupdate = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
-    db.query(newsqlpoupdate, [status, po_id], (err, result) => {
+    const newsqlpoupdate = "UPDATE purchase_order SET po_quantity = ?, units = ?, price_per_unit = ?, total_payment = ?, status = ? WHERE po_id = ?";
+    db.query(newsqlpoupdate, [quantity, units, price_per_unit, total_payment, status, po_id], (err, result) => {
         if (err) console.log(err);
     });
 })
@@ -1086,11 +1091,14 @@ app.post("/purchaseorderconfirmadd", (req,res) => {
     const supplier_id = req.body.supplier_id
     const poidlist = req.body.poidlist
     const totalamount = req.body.totalamount
+    const date_confirmed = req.body.date_confirmed
     const newpoidlist = JSON.stringify(poidlist)
+    const total_paid = 0
     const status = "Confirmed"
-    const sqlInsertpoconfirmation= "INSERT INTO final_po (supplier_id, po_id_list, total_amount) VALUES (?,?,?);"
+    const po_status = "Active"
+    const sqlInsertpoconfirmation= "INSERT INTO final_po (supplier_id, po_id_list, total_amount, date_confirmed, total_paid, po_status) VALUES (?,?,?,?,?,?);"
     const sqlupdatepoconfirmation= "UPDATE purchase_order SET status = ? WHERE po_id = ?;"
-    db.query(sqlInsertpoconfirmation,[supplier_id, newpoidlist, totalamount], (err, result) =>{
+    db.query(sqlInsertpoconfirmation,[supplier_id, newpoidlist, totalamount, date_confirmed, total_paid, po_status], (err, result) =>{
         if (err) console.log(err)
         console.log(result)
     })
@@ -1100,6 +1108,197 @@ app.post("/purchaseorderconfirmadd", (req,res) => {
             console.log(result)
         })
     }
+})
+app.get('/purchaseorderconfirmedlist/:po_status', (req, res) => {
+    const po_status = req.params.po_status
+    const sqlpoconfirmedinfo = "SELECT * FROM final_po INNER JOIN supplier_profile ON final_po.supplier_id=supplier_profile.supplier_id WHERE po_status = ?;"
+    db.query(sqlpoconfirmedinfo, po_status, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get('/purchaseorderconfirmedinfo/:final_po_id', (req, res) => {
+    const final_po_id = req.params.final_po_id
+    const sqlpoconfirmedinfo = "SELECT * FROM final_po WHERE final_po_id = ?;"
+    db.query(sqlpoconfirmedinfo, final_po_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get('/purchaseorderlistinfoconfirmed/:po_id_list', (req, res) => {
+    const po_id_list = req.params.po_id_list
+    const po_id = JSON.parse(po_id_list)
+    var list = []
+    const x = 1
+    const sqlconfirmedpolistinfo = "SELECT * FROM purchase_order INNER JOIN supplies ON purchase_order.supply_id=supplies.supply_id WHERE po_id= ?;"
+    for (let i = 0; i < po_id.length; i++){
+        db.query(sqlconfirmedpolistinfo, po_id[i], (err, result) =>{
+            list[i] = result[0]
+            if(i === po_id.length - 1){
+                res.send(list);
+            }
+        })
+    }
+})
+app.post("/purchaseorderpayment", async function (req,res) {
+    const final_po_id = req.body.final_po_id
+    const due_date = req.body.due_date
+    const dp_percentage = req.body.dp_percentage
+    const dp_amount = req.body.dp_amount
+    const payment_method = req.body.payment_method
+    const account_id = req.body.account_id
+    const account_name = req.body.account_name
+    const date_paid = req.body.date_paid
+    var paid
+    const sqlInsertpurchaseorderpayment= "INSERT INTO payment_for_po (final_po_id, due_date, dp_percentage, dp_amount, payment_method, account_id, account_name, date_paid) VALUES (?,?,?,?,?,?,?,?);"
+    const sqlgetfinalpoinfo = "SELECT * FROM final_po WHERE final_po_id = ?;"
+    const newpaidamount = "UPDATE final_po SET total_paid = ? WHERE final_po_id = ?";
+    db.query(sqlInsertpurchaseorderpayment,[final_po_id, due_date, dp_percentage, dp_amount, payment_method, account_id, account_name, date_paid], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+    })
+    function getinfo(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlgetfinalpoinfo,[final_po_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].total_paid);
+                  }
+            })
+        })
+    }
+    paid = await getinfo();
+    parseFloat(paid)
+    paid = paid + dp_amount
+    db.query(newpaidamount,[paid, final_po_id], (err, result) =>{
+        if (err) console.log(err)
+    })
+})
+app.get('/purchaseorderpaymentinfo/:final_po_id', (req, res) => {
+    const final_po_id = req.params.final_po_id
+    const sqlpaymentinfo = "SELECT * FROM payment_for_po WHERE final_po_id = ?;"
+    db.query(sqlpaymentinfo, final_po_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.put('/purchaseorderpaid', (req,res) => {
+    const final_po_id = req.body.final_po_id
+    const date_paid = req.body.date_paid
+    const po_status = "Paid"
+    const newsqlpopaid = "UPDATE final_po SET po_status = ?, date_paid = ? WHERE final_po_id = ?";
+    db.query(newsqlpopaid, [po_status, date_paid, final_po_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.put('/purchaseorderstockin', async function (req,res) {
+    const po_id = req.body.po_id
+    const supply_id = req.body.supply_id
+    const po_status = "Stocked In"
+    var quantinew, quantiold, quantitotal
+    const newsqlpostockin = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
+    const sqlpoinfo = "SELECT * FROM purchase_order WHERE po_id = ?;"
+    const sqlquantiinfo = "SELECT * FROM supplies WHERE supply_id = ?;"
+    const newsqlquantistockin = "UPDATE supplies SET quantity = ? WHERE supply_id = ?";
+    db.query(newsqlpostockin, [po_status, po_id], (err, result) => {
+        if (err) console.log(err);
+    });
+    function getinfonew(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlpoinfo,[po_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].po_quantity);
+                  }
+            })
+        })
+    }
+    function getinfoold(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlquantiinfo,[supply_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    quantinew = await getinfonew();
+    parseFloat(quantinew)
+    quantiold = await getinfoold();
+    parseFloat(quantiold)
+    quantitotal = quantiold + quantinew
+    parseFloat(quantitotal)
+    db.query(newsqlquantistockin,[quantitotal, supply_id], (err, result) =>{
+        if (err) console.log(err)
+    })
+})
+app.get('/purchaseorderinfostockin/:po_id', (req, res) => {
+    const po_id = req.params.po_id
+    const sqlpostockininfo = "SELECT * FROM purchase_order WHERE po_id = ? ;"
+    db.query(sqlpostockininfo, po_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.post("/purchaseorderstockinperishable", async function (req,res) {
+    const supply_id = req.body.supply_id
+    const po_id = req.body.po_id
+    var quantity = req.body.quantity
+    const units = req.body.units
+    const exp_date = req.body.exp_date
+    const status = "Not Expired"
+    var stocked_in_quantity = req.body.stocked_in_quantity
+    var po_quantity = req.body.po_quantity
+    var po_status = "Partly Stocked In"
+    var newstockquanti = 0
+    var itemquanti
+    const sqlInsertperishable= "INSERT INTO perishable_items (supply_id, po_id, quantity, units, exp_date, status) VALUES (?,?,?,?,?,?);"
+    const newsqlquantistockin = "UPDATE purchase_order SET stocked_in_quantity = ?, status = ? WHERE po_id = ?";
+    const getiteminfo = "SELECT * FROM supplies WHERE supply_id = ?";
+    const newsqlquantistockinsup = "UPDATE supplies SET quantity = ? WHERE supply_id = ?";
+    db.query(sqlInsertperishable,[supply_id, po_id, quantity, units, exp_date, status], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+    })
+    if (stocked_in_quantity === null){
+        stocked_in_quantity = 0
+    }
+    quantity = parseFloat(quantity)
+    stocked_in_quantity = parseFloat(stocked_in_quantity)
+    po_quantity = parseFloat(po_quantity)
+    newstockquanti = stocked_in_quantity + quantity
+    if(newstockquanti === po_quantity){
+        po_status = "Stocked In"
+    }
+    db.query(newsqlquantistockin,[newstockquanti, po_status, po_id], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+        console.log(stocked_in_quantity)
+        console.log(quantity)
+        console.log(newstockquanti)
+        console.log(po_quantity)
+    })
+    function getinfo(){
+        return new Promise ((resolve, reject) => {
+            db.query(getiteminfo,[supply_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    itemquanti = await getinfo();
+    itemquanti = parseFloat(itemquanti)
+    itemquanti = itemquanti + quantity
+    db.query(newsqlquantistockinsup,[itemquanti, supply_id], (err, result) =>{
+        if (err) console.log(err)
+    })
 })
 //crud test
 app.get("/api/get", (req,res) => {
