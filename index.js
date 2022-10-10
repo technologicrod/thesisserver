@@ -1190,29 +1190,21 @@ app.put('/purchaseorderpaid', (req,res) => {
         if (err) console.log(err);
     });
 })
-app.put('/purchaseorderstockin', async function (req,res) {
+app.post('/purchaseorderstockin', async function (req,res) {
     const po_id = req.body.po_id
     const supply_id = req.body.supply_id
-    const po_status = "Stocked In"
+    var quantity = req.body.quantity
+    const units = req.body.units
+    var stocked_in_quantity = req.body.stocked_in_quantity
+    var po_quantity = req.body.po_quantity
+    var po_status = "Partly Stocked In"
     var quantinew, quantiold, quantitotal
-    const newsqlpostockin = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
-    const sqlpoinfo = "SELECT * FROM purchase_order WHERE po_id = ?;"
+    var quantiinput = 0
+    const newsqlpostockin = "UPDATE purchase_order SET status = ?, stocked_in_quantity = ? WHERE po_id = ?";
     const sqlquantiinfo = "SELECT * FROM supplies WHERE supply_id = ?;"
     const newsqlquantistockin = "UPDATE supplies SET quantity = ? WHERE supply_id = ?";
-    db.query(newsqlpostockin, [po_status, po_id], (err, result) => {
-        if (err) console.log(err);
-    });
-    function getinfonew(){
-        return new Promise ((resolve, reject) => {
-            db.query(sqlpoinfo,[po_id], (err, result) =>{
-                if (err) {
-                    reject(err);
-                  }
-                  else {
-                    resolve(result[0].po_quantity);
-                  }
-            })
-        })
+    if (stocked_in_quantity === null){
+        stocked_in_quantity = 0
     }
     function getinfoold(){
         return new Promise ((resolve, reject) => {
@@ -1226,15 +1218,37 @@ app.put('/purchaseorderstockin', async function (req,res) {
             })
         })
     }
-    quantinew = await getinfonew();
-    parseFloat(quantinew)
+    quantity = parseFloat(quantity)
+    quantinew = quantity
+    quantinew = parseFloat(quantinew)
     quantiold = await getinfoold();
-    parseFloat(quantiold)
+    quantiold = parseFloat(quantiold)
     quantitotal = quantiold + quantinew
-    parseFloat(quantitotal)
+    quantitotal = parseFloat(quantitotal)
     db.query(newsqlquantistockin,[quantitotal, supply_id], (err, result) =>{
         if (err) console.log(err)
     })
+    stocked_in_quantity = parseFloat(stocked_in_quantity)
+    quantiinput = stocked_in_quantity + quantity
+    if (po_quantity == quantiinput){
+        po_status = "Stocked In"
+        db.query(newsqlpostockin, [po_status, quantiinput, po_id], (err, result) => {
+            if (err) console.log(err);
+        });
+    }
+    else{
+        db.query(newsqlpostockin, [po_status, quantiinput, po_id], (err, result) => {
+            if (err) console.log(err);
+        });
+    }
+    console.log("po_id :", po_id)
+    console.log("supply_id :", supply_id )
+    console.log("quantity :", quantity)
+    console.log("stocked_in_quantity :", stocked_in_quantity)
+    console.log("po_quantity :", po_quantity)
+    console.log("po_status :", po_status)
+    console.log("quantitotal :", quantitotal)
+    console.log("quantiinput :", quantiinput)
 })
 app.get('/purchaseorderinfostockin/:po_id', (req, res) => {
     const po_id = req.params.po_id
@@ -1300,6 +1314,205 @@ app.post("/purchaseorderstockinperishable", async function (req,res) {
         if (err) console.log(err)
     })
 })
+app.get("/stockoutitems", (req,res) => {
+    const sqlSelectavailable = "SELECT * FROM supplies WHERE quantity > 0;"
+    db.query(sqlSelectavailable, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/stockoutitemsinfo/:supply_id", (req,res) => {
+    const supply_id = req.params.supply_id
+    const sqlSelectavailableinfo = "SELECT * FROM supplies WHERE supply_id = ?;"
+    db.query(sqlSelectavailableinfo, supply_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/stockoutitemsperishable/:supply_id/:status", (req,res) => {
+    const supply_id = req.params.supply_id
+    const status = req.params.status
+    const sqlSelectavailableinfo = "SELECT * FROM perishable_items WHERE supply_id = ? and status = ?;"
+    db.query(sqlSelectavailableinfo, [supply_id, status], (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/stockoutitemsinputperishable", async function (req,res) {
+    const supply_id = req.body.supply_id
+    const assign_id = req.body.assign_id
+    const perishable_items_id = req.body.perishable_items_id
+    var quantity = req.body.quantity
+    const date = req.body.date
+    var itemquanti1, itemquanti2, periquanti1, periquanti2, setter
+    const newstatus = "Stocked Out"
+    const sqlinputstockout = "INSERT INTO stockedout_items (supply_id, assign_id, perishable_items_id, quantity, date) VALUES (?,?,?,?,?);"
+    const sqlSelectitems = "SELECT * FROM supplies WHERE supply_id = ?;"
+    const sqlSelectperishable = "SELECT * FROM perishable_items WHERE perishable_items_id = ?;"
+    const newsqlquantistockoutsup = "UPDATE supplies SET quantity = ? WHERE supply_id = ?";
+    const newsqlquantiperishablestockoutsup = "UPDATE perishable_items SET quantity = ? WHERE perishable_items_id = ?";
+    const newsqlquantiperishablestockoutstatus = "UPDATE perishable_items SET status = ? WHERE perishable_items_id = ?";
+    db.query(sqlinputstockout, [supply_id, assign_id, perishable_items_id, quantity, date], (err, result) =>{
+        console.log(result);
+        if (err) console.log(err)
+    })
+    function getinfo1(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlSelectitems,[supply_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    function getinfo2(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlSelectperishable,[perishable_items_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    itemquanti1 = await getinfo1();
+    periquanti1 = await getinfo2();
+    quantity = parseFloat(quantity)
+    itemquanti1 = parseFloat(itemquanti1)
+    periquanti1 = parseFloat(periquanti1)
+    itemquanti2 = itemquanti1 - quantity
+    periquanti2 = periquanti1 - quantity
+    db.query(newsqlquantistockoutsup, [itemquanti2, supply_id], (err, result) =>{
+        console.log(result);
+        if (err) console.log(err)
+    })
+    if (perishable_items_id != 0){
+        db.query(newsqlquantiperishablestockoutsup, [periquanti2, perishable_items_id], (err, result) =>{
+            console.log(result);
+            if (err) console.log(err)
+        })
+        setter = await getinfo2();
+    }
+    if (setter == 0){
+        db.query(newsqlquantiperishablestockoutstatus, [newstatus, perishable_items_id], (err, result) =>{
+            console.log(result);
+            if (err) console.log(err)
+        })
+    }
+    console.log("supply_id", supply_id)
+    console.log("assign_id", assign_id)
+    console.log("perishable_items_id", perishable_items_id)
+    console.log("quantity", quantity)
+    console.log("date", date)
+    console.log("itemquanti1", itemquanti1)
+    console.log("itemquanti2", itemquanti2)
+    console.log("periquanti1", periquanti1)
+    console.log("periquanti2", periquanti2)
+    console.log("setter", setter)
+
+})
+app.post("/stockoutitemsinputnotperishable", async function (req,res) {
+    const supply_id = req.body.supply_id
+    const assign_id = req.body.assign_id
+    var quantity = req.body.quantity
+    const date = req.body.date
+    var itemquanti1, itemquanti2
+    const sqlinputstockout = "INSERT INTO stockedout_items (supply_id, assign_id, quantity, date) VALUES (?,?,?,?);"
+    const sqlSelectitems = "SELECT * FROM supplies WHERE supply_id = ?;"
+    const newsqlquantistockoutsup = "UPDATE supplies SET quantity = ? WHERE supply_id = ?";
+    db.query(sqlinputstockout, [supply_id, assign_id, quantity, date], (err, result) =>{
+        console.log(result);
+        if (err) console.log(err)
+    })
+    function getinfo1(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlSelectitems,[supply_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    itemquanti1 = await getinfo1();
+    quantity = parseFloat(quantity)
+    itemquanti1 = parseFloat(itemquanti1)
+    itemquanti2 = itemquanti1 - quantity
+    db.query(newsqlquantistockoutsup, [itemquanti2, supply_id], (err, result) =>{
+        console.log(result);
+        if (err) console.log(err)
+    })
+    console.log("supply_id", supply_id)
+    console.log("assign_id", assign_id)
+    console.log("quantity", quantity)
+    console.log("date", date)
+    console.log("itemquanti1", itemquanti1)
+    console.log("itemquanti2", itemquanti2)
+
+})
+app.get("/stockoutharvestmonitoring/:assign_id", (req,res) => {
+    const assign_id = req.params.assign_id
+    const sqlSelectsomonitor = "SELECT *, stockedout_items.quantity AS soquantity FROM stockedout_items INNER JOIN plant_activities ON stockedout_items.assign_id=plant_activities.assign_id INNER JOIN supplies ON stockedout_items.supply_id=supplies.supply_id WHERE plant_activities.activities_id = ?;"
+    db.query(sqlSelectsomonitor, assign_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/iteminventorystockouthistory/:supply_id", (req,res) => {
+    const supply_id = req.params.supply_id
+    const sqlitemstockouthistory = "SELECT * FROM stockedout_items WHERE supply_id = ?;"
+    db.query(sqlitemstockouthistory, supply_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/iteminventorystockinhistory/:supply_id/:status", (req,res) => {
+    const supply_id = req.params.supply_id
+    const status = req.params.status
+    const sqlitemstockouthistory = "SELECT * FROM purchase_order WHERE supply_id = ? and status = ?;"
+    db.query(sqlitemstockouthistory, [supply_id, status], (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/inputredelivery", (req,res) => {
+    const supply_id = req.body.supply_id
+    const po_id = req.body.po_id
+    const remarks = req.body.remarks
+    const prev_status = req.body.prev_status
+    const status = "Redelivery"
+    const sqlInsertredelivery = "INSERT INTO redelivery (supply_id, po_id, remarks, prev_status) VALUES (?,?,?,?);"
+    const newsqlquantistockin = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
+    db.query(sqlInsertredelivery,[supply_id, po_id, remarks, prev_status], (err, result) =>{
+        console.log(result);
+    })
+    db.query(newsqlquantistockin,[status, po_id], (err, result) =>{
+        console.log(result);
+    })
+})
+app.get("/redeliveryinfo/:po_id/:supply_id", (req,res) => {
+    const po_id = req.params.po_id
+    const supply_id = req.params.supply_id
+    const sqlitemstockouthistory = "SELECT * FROM redelivery WHERE po_id = ? and supply_id = ?"
+    db.query(sqlitemstockouthistory, [po_id, supply_id], (err, result) =>{
+        res.send(result);
+    })
+})
+app.put('/updateredelivery', (req,res) => {
+    const po_id = req.body.po_id;
+    const redelivery_id = req.body.redelivery_id;
+    const date_delivered = req.body.date_delivered;
+    const prev_status = req.body.prev_status
+    const sqlUpdatepo = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
+    const sqlUpdatered = "UPDATE redelivery SET date_delivered = ? WHERE redelivery_id = ?";
+    db.query(sqlUpdatepo, [prev_status, po_id], (err, result) => {
+        if (err) console.log(err);
+    });
+    db.query(sqlUpdatered, [date_delivered, redelivery_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
 //crud test
 app.get("/api/get", (req,res) => {
     const sqlSelect = "SELECT * FROM movie_reviews;"
@@ -1333,7 +1546,6 @@ app.put('/api/update', (req,res) => {
     db.query(sqlUpdate, [review, name], (err, result) => {
         if (err) console.log(err);
     });
-
 })
 app.listen(3001, () => {
     console.log("running on port 3001");
