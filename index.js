@@ -681,7 +681,7 @@ app.post("/harvestcalendarmonitoringadd", (req,res) => {
     const act_increment = req.body.act_increment
     const sqlInsertplantharvestcalendarmonitoring= "INSERT INTO plant_monitoring (batch_id, plant_stage, date_from, date_to, survival_rate, remarks, curr_height, curr_width, quantity, act_increment) VALUES (?,?,?,?,?,?,?,?,?,?);"
     db.query(sqlInsertplantharvestcalendarmonitoring,[batch_id, plant_stage, date_from, date_to, survival_rate, remarks, curr_height, curr_width, quantity, act_increment], (err, result) =>{
-        
+        if (err) console.log(err)
     })
 })
 app.get('/harvestcalendar/:batch_id', (req, res) => {
@@ -760,17 +760,65 @@ app.put('/harvestdiseaseupdate', (req,res) => {
         console.log("desc: ",disease_desc)
     });
 })
-app.post("/harvestinputmortalities", (req,res) => {
+app.post("/harvestinputmortalities", async function (req,res){
     const activities_id = req.body.activities_id
     const batch_id = req.body.batch_id
-    const quantity_loss = req.body.quantity_loss
+    var quantity_loss = req.body.quantity_loss
     const units = req.body.units
     const date = req.body.date
+    var oldquanti, newquanti, quanti2, survival_rate
     const sqlInsertharvestmortalities= "INSERT INTO mortalities (activities_id, batch_id, quantity_loss, units, date) VALUES (?,?,?,?,?);"
+    const sqlInsertharvestquantityupdate = "UPDATE plant_monitoring SET quantity = ?  WHERE activities_id = ?";
+    const sqlInsertharvestsurvivalupdate = "UPDATE plant_monitoring SET survival_rate = ?  WHERE activities_id = ?";
+    const sqlselectactivity = "SELECT * FROM plant_monitoring WHERE activities_id = ?";
+    const sqlselectbatch = "SELECT * FROM plant_batch WHERE batch_id = ?";
     db.query(sqlInsertharvestmortalities,[activities_id, batch_id, quantity_loss, units, date], (err, result) =>{
         if (err) console.log(err)
         console.log(result)
     })
+    function getinfo(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlselectactivity,[activities_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    function getinfo2(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlselectbatch,[batch_id], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].quantity);
+                  }
+            })
+        })
+    }
+    oldquanti = await getinfo();
+    oldquanti = parseFloat(oldquanti)
+    quantity_loss = parseFloat(quantity_loss)
+    newquanti = oldquanti - quantity_loss
+    db.query(sqlInsertharvestquantityupdate,[newquanti, activities_id], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+    })
+    quanti2 = await getinfo2()
+    quanti2 = parseFloat(quanti2)
+    survival_rate = ((newquanti / quanti2) * 100)
+    db.query(sqlInsertharvestsurvivalupdate,[survival_rate, activities_id], (err, result) =>{
+        if (err) console.log(err)
+        console.log(result)
+        console.log("q1: ", quanti1)
+        console.log("q2: ", quanti2)
+        console.log("survival_rate: ", survival_rate)
+    })
+
 })
 app.get('/harvestmortalitiesinfo/:batch_id', (req, res) => {
     const batch_id = req.params.batch_id;
@@ -1512,6 +1560,100 @@ app.put('/updateredelivery', (req,res) => {
     db.query(sqlUpdatered, [date_delivered, redelivery_id], (err, result) => {
         if (err) console.log(err);
     });
+})
+app.post("/inputrefund", (req,res) => {
+    const supply_id = req.body.supply_id
+    const po_id = req.body.po_id
+    const amount = req.body.amount
+    const date = req.body.date
+    const remarks = req.body.remarks
+    const payment_method = req.body.payment_method
+    const account_id = req.body.account_id
+    const account_name = req.body.account_name
+    const status = "Refund"
+    const sqlInsertrefund = "INSERT INTO refund (supply_id, po_id, amount, date, remarks, payment_method, account_id, account_name) VALUES (?,?,?,?,?,?,?,?);"
+    const newsqlquantistockin = "UPDATE purchase_order SET status = ? WHERE po_id = ?";
+    db.query(sqlInsertrefund,[supply_id, po_id, amount, date, remarks, payment_method, account_id, account_name], (err, result) =>{
+        console.log(result);
+    })
+    db.query(newsqlquantistockin,[status, po_id], (err, result) =>{
+        console.log(result);
+    })
+})
+app.get("/availablewastedplants/:status", (req,res) => {
+    const status = req.params.status
+    const sqlSelectplants = "SELECT * FROM batch_quantity_variations WHERE var_status = ?;"
+    db.query(sqlSelectplants, status, (err, result) =>{
+        res.send(result);
+    })
+})
+app.put("/availablewastedplantsupdate", (req,res) => {
+    const status = req.body.status
+    const quantity_id = req.body.quantity_id
+    const sqlupdateplants = "UPDATE batch_quantity_variations SET var_status = ? WHERE quantity_id = ?";
+    db.query(sqlupdateplants,[status, quantity_id], (err, result) =>{
+        console.log(result);
+        if (err) console.log(err)
+    })
+})
+app.post("/otherexpensesadd", (req,res) => {
+    const otherexpensesid = req.body.otherexpensesid
+    const total_amount = req.body.total_amount
+    const period_from = req.body.period_from
+    const period_to = req.body.period_to
+    const due_date = req.body.due_date
+    const status = req.body.status
+    const barcode_or_receipt = req.body.barcode_or_receipt
+    const sqlInsertotherexpenses = "INSERT INTO other_expenses (otherexpensesid, total_amount, period_from, period_to, due_date, status, barcode_or_receipt) VALUES (?,?,?,?,?,?,?);"
+    db.query(sqlInsertotherexpenses,[otherexpensesid, total_amount, period_from, period_to, due_date, status, barcode_or_receipt], (err, result) =>{
+        console.log(result);
+        if (err) console.log(err)
+    })
+})
+app.get("/otherexpensespending/:status", (req,res) => {
+    const status = req.params.status
+    const sqlSelectoepending = "SELECT * FROM other_expenses INNER JOIN plantutilitiesotherexpensesprofiles ON other_expenses.otherexpensesid=plantutilitiesotherexpensesprofiles.otherexpensesid WHERE status = ?;"
+    db.query(sqlSelectoepending, status, (err, result) =>{
+        res.send(result);
+        if (err) console.log(err)
+    })
+})
+app.get("/otherexpensespaid/:status", (req,res) => {
+    const status = req.params.status
+    const sqlSelectoepending = "SELECT * FROM other_expenses INNER JOIN plantutilitiesotherexpensesprofiles ON other_expenses.otherexpensesid=plantutilitiesotherexpensesprofiles.otherexpensesid INNER JOIN employees ON other_expenses.emp_id=employees.emp_id WHERE status = ?;"
+    db.query(sqlSelectoepending, status, (err, result) =>{
+        res.send(result);
+        if (err) console.log(err)
+    })
+})
+app.get("/otherexpensesinfo/:other_expenses_id", (req,res) => {
+    const other_expenses_id = req.params.other_expenses_id
+    const sqlSelectoeinfo = "SELECT * FROM other_expenses INNER JOIN plantutilitiesotherexpensesprofiles ON other_expenses.otherexpensesid=plantutilitiesotherexpensesprofiles.otherexpensesid WHERE other_expenses_id = ?;"
+    db.query(sqlSelectoeinfo, other_expenses_id, (err, result) =>{
+        res.send(result);
+        if (err) console.log(err)
+    })
+})
+app.put('/otherexpensesupdate', (req,res) => {
+    const other_expenses_id = req.body.other_expenses_id;
+    const emp_id = req.body.emp_id;
+    const paid_to = req.body.paid_to;
+    const date_paid = req.body.date_paid;
+    const payment_method = req.body.payment_method;
+    const total_payment = req.body.total_payment;
+    const account_id = req.body.account_id;
+    const account_name = req.body.account_name;
+    const status = req.body.status;
+    const sqlUpdateeo = "UPDATE other_expenses SET emp_id = ?, paid_to = ?, date_paid = ?, payment_method = ?, total_payment = ?, account_id = ?, account_name = ?, status = ? WHERE other_expenses_id = ?";
+    db.query(sqlUpdateeo, [emp_id, paid_to, date_paid, payment_method, total_payment, account_id, account_name, status, other_expenses_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.get("/purchaseorderexpenses", (req,res) => {
+    const sqlSelectpoexpenses = "SELECT * FROM payment_for_po;"
+    db.query(sqlSelectpoexpenses, (err, result) =>{
+        res.send(result);
+    })
 })
 //crud test
 app.get("/api/get", (req,res) => {
