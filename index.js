@@ -4,13 +4,30 @@ const mysql = require('mysql');
 const multer = require('multer');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const session = require('express-session');
 const path = require('path');
 const { parse } = require('path');
 
-app.use(cors());
+app.use(
+    cors({
+      origin: true,
+      credentials: true,
+      optionsSuccessStatus: 200
+  }))
 app.use(express.json());
 app.use(bodyParser.urlencoded({extended: true}));
-
+// for session
+const oneDay = 1000 * 60 * 60 * 24;
+app.use(session({
+	secret: 'secret',
+	resave: true,
+    cookie: { maxAge: oneDay },
+	saveUninitialized: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'static')));
+var un, at //for username and account type
 /*const db = mysql.createPool({
     host: '192.168.254.111',
     user: 'rjatalo',
@@ -30,19 +47,54 @@ db.getConnection(function (err) {
     }
     console.log('Connected to the MySQL server.');
 })
-const fileStorageEngine = multer.diskStorage({
+/*const fileStorageEngine = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'images');
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + "--" + file.originalname);
     },
- })
-const upload = multer({ storage: fileStorageEngine});
-
+ })*/
+const upload = multer({storage:multer.memoryStorage()});
+app.post("/logout", (req, res) => {
+    req.session.loggedin = false
+    req.session.username = ""
+    un = ""
+    at = ""
+})
+app.post("/auth", (req,res) => {
+    const username = req.body.username
+    const pass = req.body.pass
+    const sqlInsert = "SELECT * FROM employee_accounts WHERE username = ? AND pass = ?;"
+    un = ""
+    at = ""
+    var unl = 0
+    db.query(sqlInsert,[username, pass], (err, result) =>{
+        console.log("reso: ",result, result.length);
+        unl = result.length
+        console.log(unl)
+        if (err) console.log(err)
+        if(unl != 0){
+            req.session.loggedin = true;
+            req.session.username = username;
+            un = req.session.username
+            at = result[0].account_type
+            //res.redirect('/');
+            res.send(un)            
+            console.log("at", at)
+        }
+        res.end();
+    })
+})
 
 app.get("/", (req, res) => {
-    res.send("hello world")
+    if (req) {
+		res.send(un);
+        console.log("uno", un)
+	} else {
+		res.send('Please login to view this page!');
+	}
+	res.end();
 })
 
 
@@ -54,12 +106,12 @@ app.get("/employeelist", (req,res) => {
 })
 
 
-app.post("/employeelistadd", upload.array('images', 2), async function (req,res) {
-
+app.post("/employeelistadd", upload.single('profileImg'), async function (req,res) {
     const employeename = req.body.employeename
-    const employeefarm = req.body.employeefarm
+    const employeeblock = req.body.employeeblock
     const employeelot = req.body.employeelot
     const employeestreet = req.body.employeestreet
+    const employeebarangay = req.body.employeebarangay
     const employeecity = req.body.employeecity
     const employeeprovince = req.body.employeeprovince
     const employeezipcode = req.body.employeezipcode
@@ -68,14 +120,14 @@ app.post("/employeelistadd", upload.array('images', 2), async function (req,res)
     const employeeposition = req.body.employeeposition
     const employeestatus= req.body.employeestatus
     const employeejobdescription = req.body.employeejobdescription
-    const employeeidpicture = req.body.employeeidpicture
+    const employeeidpicture = req.file.buffer.toString('base64')
     var emp_id
-    const sqlInsertemployee = "INSERT INTO employees (farm_id, emp_name, contact_num, educational_attainment, emp_pos, emp_status, job_desc, id_pic) VALUES (?,?,?,?,?,?,?,?);"
-    const sqlInsertemployeeaddress = "INSERT INTO address (emp_id, lot, street, city, province, zipcode) VALUES (?,?,?,?,?,?);"
+    const sqlInsertemployee = "INSERT INTO employees (emp_name, contact_num, educational_attainment, emp_pos, emp_status, job_desc, id_pic) VALUES (?,?,?,?,?,?,?);"
+    const sqlInsertemployeeaddress = "INSERT INTO address (emp_id, block, lot, street, barangay, city, province, zipcode) VALUES (?,?,?,?,?,?,?,?);"
     const sqlInsertemployeeposition = "INSERT INTO employee_position_history (emp_id, emp_position, emp_status) VALUES (?,?,?);"
     function addemployee(){
         return new Promise ((resolve, reject) => {
-            db.query(sqlInsertemployee,[employeefarm, employeename, employeecontact, employeeeducationalattainment, employeeposition, employeestatus, employeejobdescription, employeeidpicture], (err, result) =>{
+            db.query(sqlInsertemployee,[employeename, employeecontact, employeeeducationalattainment, employeeposition, employeestatus, employeejobdescription, employeeidpicture], (err, result) =>{
                 if (err) {
                     reject(err);
                   }
@@ -87,7 +139,7 @@ app.post("/employeelistadd", upload.array('images', 2), async function (req,res)
     }
     emp_id = await addemployee();
     console.log(emp_id)
-    db.query(sqlInsertemployeeaddress,[emp_id, employeelot, employeestreet, employeecity, employeeprovince, employeezipcode], (err, result) =>{
+    db.query(sqlInsertemployeeaddress,[emp_id, employeeblock, employeelot, employeestreet, employeebarangay, employeecity, employeeprovince, employeezipcode], (err, result) =>{
         if (err) console.log(err);
     })
     db.query(sqlInsertemployeeposition,[emp_id, employeeposition, employeestatus], (err, result) =>{
@@ -128,9 +180,10 @@ app.get('/employeelisteditaddress/:employeeid', (req, res) => {
 app.put('/employeelistupdate', async function (req,res) {
     const emp_id = req.body.emp_id
     const employeename = req.body.employeename
-    const employeefarm = req.body.employeefarm
+    const employeeblock = req.body.employeeblock
     const employeelot = req.body.employeelot
     const employeestreet = req.body.employeestreet
+    const employeebarangay = req.body.employeebarangay
     const employeecity = req.body.employeecity
     const employeeprovince = req.body.employeeprovince
     const employeezipcode = req.body.employeezipcode
@@ -138,15 +191,16 @@ app.put('/employeelistupdate', async function (req,res) {
     const employeeeducationalattainment = req.body.employeeeducationalattainment
     const employeeposition = req.body.employeeposition
     const employeestatus= req.body.employeestatus
-    const newsqlemployeeupdate = "UPDATE employees SET farm_id = ?, emp_name = ?, contact_num = ?, educational_attainment = ?, emp_pos = ?, emp_status = ? WHERE emp_id = ?";
-    const newsqlemployeeaddress = "UPDATE address SET lot = ?, street = ?, city = ?, province = ?, zipcode= ? WHERE emp_id = ?";
+    const employeejobdescription= req.body.employeejobdescription
+    const newsqlemployeeupdate = "UPDATE employees SET emp_name = ?, contact_num = ?, educational_attainment = ?, emp_pos = ?, emp_status = ?, job_desc = ? WHERE emp_id = ?";
+    const newsqlemployeeaddress = "UPDATE address SET block = ?, lot = ?, street = ?, barangay = ?, city = ?, province = ?, zipcode= ? WHERE emp_id = ?";
     const sqlInsertemployeeposition = "INSERT INTO employee_position_history (emp_id, emp_position, emp_status) VALUES (?,?,?);"
     const sqlcheckposhistory = "SELECT * FROM employee_position_history WHERE emp_id = ? ORDER BY date_given DESC LIMIT 1;"
     var oldpos, oldstatus
-    db.query(newsqlemployeeupdate, [employeefarm, employeename, employeecontact, employeeeducationalattainment, employeeposition, employeestatus, emp_id], (err, result) => {
+    db.query(newsqlemployeeupdate, [employeename, employeecontact, employeeeducationalattainment, employeeposition, employeestatus, employeejobdescription, emp_id], (err, result) => {
         if (err) console.log(err);
     });
-    db.query(newsqlemployeeaddress, [employeelot, employeestreet, employeecity, employeeprovince, employeezipcode, emp_id], (err, result) => {
+    db.query(newsqlemployeeaddress, [employeeblock, employeelot, employeestreet, employeebarangay, employeecity, employeeprovince, employeezipcode, emp_id], (err, result) => {
         if (err) console.log(err);
     });
     function getpos(){
@@ -181,10 +235,10 @@ app.put('/employeelistupdate', async function (req,res) {
         })
     }
 })
-app.put('/employeeidpicupdate', (req,res) => {
+app.put('/employeeidpicupdate', upload.single('profileImg'), (req,res) => {
     const employeeid = req.body.employeeid
-    const employeeidpicture = req.body.employeeidpicture;
-    const newsqlemployeeidpictureupdate = "UPDATE employeeprofile SET employeeidpicture = ? WHERE employeeid = ?";
+    const employeeidpicture = req.file.buffer.toString('base64');
+    const newsqlemployeeidpictureupdate = "UPDATE employees SET id_pic = ? WHERE emp_id = ?";
     db.query(newsqlemployeeidpictureupdate, [employeeidpicture, employeeid], (err, result) => {
         if (err) console.log(err);
     });
@@ -266,46 +320,35 @@ app.get('/plantprofilesview/:plantprofileid', (req, res) => {
         res.json(result);
     })
 })
-app.post("/plantprofileadd", upload.single("image"), (req,res) => {
+app.post("/plantprofileadd", upload.single('profileImg'), (req,res) => {
     const plantprofileplantname = req.body.plantprofileplantname
-    const plantprofilefarm = req.body.plantprofilefarm
     const plantprofilecategory = req.body.plantprofilecategory
     const plantprofilescientificname = req.body.plantprofilepscientificname
     const plantprofilevariety = req.body.plantprofilevariety
     const plantprofileplanttype = req.body.plantprofileplanttype
     const plantprofilemonths = req.body.plantprofilemonths
-    const plantprofilepicture = req.body.plantprofilepicture
+    const plantprofilepicture = req.file.buffer.toString('base64')
     const plantprofiledescription = req.body.plantprofiledescription
-    const sqlInsertplantprofile = "INSERT INTO plant_profile (farm_id, plant_name, sci_name, category, variety, plant_type, num_of_mon_to_harvest, img, plant_desc) VALUES (?,?,?,?,?,?,?,?,?);"
-    db.query(sqlInsertplantprofile,[plantprofilefarm, plantprofileplantname, plantprofilescientificname, plantprofilecategory, plantprofilevariety, plantprofileplanttype, plantprofilemonths, plantprofilepicture, plantprofiledescription], (err, result) =>{
-        console.log(plantprofileplantname);
-        console.log(plantprofilefarm);
-        console.log(plantprofilecategory);
-        console.log(plantprofilescientificname);
-        console.log(plantprofilevariety);
-        console.log(plantprofileplanttype);
-        console.log(plantprofilemonths);
-        console.log(plantprofilepicture);
-        console.log(plantprofiledescription);
+    const sqlInsertplantprofile = "INSERT INTO plant_profile (plant_name, sci_name, category, variety, plant_type, num_of_mon_to_harvest, img, plant_desc) VALUES (?,?,?,?,?,?,?,?);"
+    db.query(sqlInsertplantprofile,[plantprofileplantname, plantprofilescientificname, plantprofilecategory, plantprofilevariety, plantprofileplanttype, plantprofilemonths, plantprofilepicture, plantprofiledescription], (err, result) =>{
+        
         if(err) console.log(err)
     })
 })
 app.put("/plantprofileedit", (req,res) => {
     const plantprofileid = req.body.plantprofileid
     const plantprofileplantname = req.body.plantprofileplantname
-    const plantprofilefarm = req.body.plantprofilefarm
     const plantprofilecategory = req.body.plantprofilecategory
     const plantprofilescientificname = req.body.plantprofilescientificname
     const plantprofilevariety = req.body.plantprofilevariety
     const plantprofileplanttype = req.body.plantprofileplanttype
     const plantprofilemonths = req.body.plantprofilemonths
     const plantprofiledescription = req.body.plantprofiledescription
-    const sqlplantprofileedit= "UPDATE plant_profile SET farm_id = ?, plant_name = ?, sci_name = ?, category = ?, variety = ?, plant_type = ?, num_of_mon_to_harvest = ?, plant_desc = ? WHERE plant_id = ?";
-    db.query(sqlplantprofileedit, [plantprofilefarm, plantprofileplantname, plantprofilescientificname, plantprofilecategory, plantprofilevariety, plantprofileplanttype, plantprofilemonths, plantprofiledescription, plantprofileid], (err, result) => {
+    const sqlplantprofileedit= "UPDATE plant_profile SET plant_name = ?, sci_name = ?, category = ?, variety = ?, plant_type = ?, num_of_mon_to_harvest = ?, plant_desc = ? WHERE plant_id = ?";
+    db.query(sqlplantprofileedit, [plantprofileplantname, plantprofilescientificname, plantprofilecategory, plantprofilevariety, plantprofileplanttype, plantprofilemonths, plantprofiledescription, plantprofileid], (err, result) => {
         if (err) console.log(err);
         console.log(plantprofileid)
         console.log(plantprofileplantname)
-        console.log(plantprofilefarm)
         console.log(plantprofilecategory)
         console.log(plantprofilescientificname)
         console.log(plantprofilevariety)
@@ -314,11 +357,11 @@ app.put("/plantprofileedit", (req,res) => {
         console.log(plantprofiledescription)
     });
 })
-app.put('/plantprofilepicedit', (req,res) => {
-    const plantprofileid = req.body.plantprofileid
-    const plantprofilepicture = req.body.plantprofilepicture
-    const newsqlplantprofilepicupdate = "UPDATE plantprofile SET plantprofilepicture = ? WHERE plantprofileid = ?";
-    db.query(newsqlplantprofilepicupdate, [plantprofilepicture, plantprofileid], (err, result) => {
+app.put('/plantprofilepicedit', upload.single('profileImg'), (req,res) => {
+    const plant_id = req.body.plant_id
+    const img = req.file.buffer.toString('base64')
+    const newsqlplantprofilepicupdate = "UPDATE plant_profile SET img = ? WHERE plant_id = ?";
+    db.query(newsqlplantprofilepicupdate, [img, plant_id], (err, result) => {
         if (err) console.log(err);
     });
 })
@@ -395,14 +438,10 @@ app.post("/employeesaccountadd", (req,res) => {
     })
     
 })
-app.post("/farmpprofileadd", async function (req,res)  {
+app.post("/farmpprofileadd", upload.array("profileImg", 3), async function (req,res)  {
     //farm
     const farm_name = req.body.farm_name
     const size = req.body.size
-    const soil_type = req.body.soil_type
-    const description = req.body.description
-    const title = req.body.title
-    const main_owner = req.body.main_owner
     var farm_id
     //owner
     const owner_name = req.body.owner_name
@@ -419,25 +458,34 @@ app.post("/farmpprofileadd", async function (req,res)  {
     const farm_contact_info_contact_num = req.body.farm_contact_info_contact_num
     const farm_contact_info_contact_email = req.body.farm_contact_info_contact_email
     //farm address
+    const block = req.body.block
     const lot = req.body.lot
     const street = req.body.street
+    const barangay = req.body.barangay
     const city = req.body.city
     const province = req.body.province
     const zipcode = req.body.zipcode
     //owner address
+    const owner_block = req.body.owner_block
     const owner_lot = req.body.owner_lot
     const owner_street = req.body.owner_street
+    const owner_barangay = req.body.owner_barangay
     const owner_city = req.body.owner_city
     const owner_province = req.body.owner_province
     const owner_zipcode = req.body.owner_zipcode
-    const sqlInsertfarmprofile = "INSERT INTO farm (farm_name, size, soil_type, description, title, main_owner) VALUES (?,?,?,?,?,?);"
+    //social
+    const img_map = req.files[0].buffer.toString('base64')
+    const google_map = req.files[1].buffer.toString('base64')
+    const org_chart = req.files[2].buffer.toString('base64')
+    const sqlInsertfarmprofile = "INSERT INTO farm (farm_name, size) VALUES (?,?);"
     const sqlInsertownerprofile = "INSERT INTO owners (farm_id, owner_name, owner_type, contact_num, contact_email, educational_attainment, position, job_desc) VALUES (?,?,?,?,?,?,?,?);"
     const sqlInsertfarmcontact = "INSERT INTO contact_info (farm_id, contact_person_name, position, contact_num, contact_email) VALUES (?,?,?,?,?);"
-    const sqlInsertfarmadress = "INSERT INTO address (farm_id, lot, street, city, province, zipcode) VALUES (?,?,?,?,?,?);"
-    const sqlInsertowneradress = "INSERT INTO address (owner_id, lot, street, city, province, zipcode) VALUES (?,?,?,?,?,?);"
+    const sqlInsertfarmadress = "INSERT INTO address (farm_id, block, lot, street, barangay, city, province, zipcode) VALUES (?,?,?,?,?,?,?,?);"
+    const sqlInsertfarmsocial = "INSERT INTO social_info (farm_id, img_map, google_map, org_chart) VALUES (?,?,?,?);"
+    const sqlInsertowneradress = "INSERT INTO address (owner_id, block, lot, street, barangay, city, province, zipcode) VALUES (?,?,?,?,?,?,?,?);"
     function addfarm(){
         return new Promise ((resolve, reject) => {
-            db.query(sqlInsertfarmprofile,[farm_name, size, soil_type, description, title, main_owner], (err, result) =>{
+            db.query(sqlInsertfarmprofile,[farm_name, size], (err, result) =>{
                 if (err) {
                     reject(err);
                   }
@@ -464,9 +512,12 @@ app.post("/farmpprofileadd", async function (req,res)  {
     db.query(sqlInsertfarmcontact,[farm_id, farm_contact_person_name, farm_position, farm_contact_info_contact_num, farm_contact_info_contact_email], (err, result) =>{
         console.log(result)
     })
-    db.query(sqlInsertfarmadress,[farm_id, lot, street, city, province, zipcode], (err, result) =>{
+    db.query(sqlInsertfarmadress,[farm_id, block, lot, street, barangay, city, province, zipcode], (err, result) =>{
     })
-    db.query(sqlInsertowneradress,[owner_id, owner_lot, owner_street, owner_city, owner_province, owner_zipcode], (err, result) =>{
+    db.query(sqlInsertfarmsocial,[farm_id, img_map, google_map, org_chart], (err, result) =>{
+        if(err) console.log(err)
+    })
+    db.query(sqlInsertowneradress,[owner_id, owner_block, owner_lot, owner_street, owner_barangay, owner_city, owner_province, owner_zipcode], (err, result) =>{
     })
 })
 app.get("/farmlist", (req,res) => {
@@ -480,6 +531,13 @@ app.get('/farmprofileidget/:farm_id', (req, res) => {
     const farm_id = req.params.farm_id;
     const sqlfarmprofileidget = "SELECT * from farm WHERE farm_id = ?;"
     db.query(sqlfarmprofileidget, farm_id, (err, result) =>{
+        res.json(result);
+    })
+})
+app.get('/farmprofilepcicsget/:farm_id', (req, res) => {
+    const farm_id = req.params.farm_id;
+    const sqlfarmprofilepicsget = "SELECT * from social_info WHERE farm_id = ?;"
+    db.query(sqlfarmprofilepicsget, farm_id, (err, result) =>{
         res.json(result);
     })
 })
@@ -499,7 +557,7 @@ app.get("/farmaddress/:farm_id", (req,res) => {
 })
 app.get("/owneraddress/:farm_id", (req,res) => {
     const farm_id = req.params.farm_id;
-    const sqlSelectowneraddress = "SELECT address.owner_id, address.lot, address.city, address.province, address.zipcode FROM address INNER JOIN owners ON address.owner_id = owners.owner_id INNER JOIN farm ON owners.farm_id = farm.farm_id WHERE farm.farm_id = ?;"
+    const sqlSelectowneraddress = "SELECT address.owner_id, address.lot, address.city, address.province, address.zipcode, address.block, address.barangay, address.street FROM address INNER JOIN owners ON address.owner_id = owners.owner_id INNER JOIN farm ON owners.farm_id = farm.farm_id WHERE farm.farm_id = ?;"
     db.query(sqlSelectowneraddress, farm_id, (err, result) =>{
         res.send(result);
     })
@@ -535,13 +593,15 @@ app.post('/ownersadd', async function (req,res) {
     const educational_attainment = req.body.educational_attainment
     const position = req.body.position
     const job_desc = req.body.job_desc
+    const block = req.body.block
     const lot = req.body.lot
     const street = req.body.street
+    const barangay = req.body.barangay
     const city = req.body.city
     const province = req.body.province
     const zipcode = req.body.zipcode
     const sqlInsertownerprofile = "INSERT INTO owners (farm_id, owner_name, owner_type, contact_num, contact_email, educational_attainment, position, job_desc) VALUES (?,?,?,?,?,?,?,?);"
-    const sqlInsertowneradress = "INSERT INTO address (owner_id, lot, street, city, province, zipcode) VALUES (?,?,?,?,?,?);"
+    const sqlInsertowneradress = "INSERT INTO address (owner_id, block, lot, street, barangay, city, province, zipcode) VALUES (?,?,?,?,?,?,?,?);"
     function addowner(){
         return new Promise ((resolve, reject) => {
             db.query(sqlInsertownerprofile,[farm_id, owner_name, owner_type, contact_num, contact_email, educational_attainment, position, job_desc], (err, result) =>{
@@ -555,18 +615,17 @@ app.post('/ownersadd', async function (req,res) {
         })
     }
     owner_id = await addowner();
-    db.query(sqlInsertowneradress,[owner_id, lot, street, city, province, zipcode], (err, result) =>{
+    db.query(sqlInsertowneradress,[owner_id, block, lot, street, barangay, city, province, zipcode], (err, result) =>{
     })
 })
 app.put('/farmupdate', (req,res) => {
     const farm_id = req.body.farm_id
+    const farm_name = req.body.farm_name
     const size = req.body.size
-    const soil_type = req.body.soil_type
-    const description = req.body.description
-    const title = req.body.title
-    const main_owner = req.body.main_owner
+    const block = req.body.block
     const lot = req.body.lot
     const street = req.body.street
+    const barangay = req.body.barangay
     const city = req.body.city
     const province = req.body.province
     const zipcode = req.body.zipcode
@@ -574,16 +633,40 @@ app.put('/farmupdate', (req,res) => {
     const position = req.body.position
     const contact_num = req.body.contact_num
     const contact_email = req.body.contact_email
-    const newsqlfarmupdate = "UPDATE farm SET size = ? , soil_type = ?, description = ?, title = ? , main_owner = ? WHERE farm_id = ?";
-    const newsqlfarmaddressupdate = "UPDATE address SET lot = ? , street = ?, city = ?, province = ? , zipcode = ? WHERE farm_id = ?";
+    const newsqlfarmupdate = "UPDATE farm SET farm_name = ?, size = ? WHERE farm_id = ?";
+    const newsqlfarmaddressupdate = "UPDATE address SET block = ?, lot = ? , street = ?, barangay = ?, city = ?, province = ? , zipcode = ? WHERE farm_id = ?";
     const newsqlfarmcontactupdate = "UPDATE contact_info SET contact_person_name = ? , position = ?, contact_num = ?, contact_email = ? WHERE farm_id = ?";
-    db.query(newsqlfarmupdate, [size, soil_type, description, title, main_owner, farm_id], (err, result) => {
+    db.query(newsqlfarmupdate, [farm_name, size, farm_id], (err, result) => {
         if (err) console.log(err);
     });
-    db.query(newsqlfarmaddressupdate, [lot, street, city, province, zipcode, farm_id], (err, result) => {
+    db.query(newsqlfarmaddressupdate, [block, lot, street, barangay, city, province, zipcode, farm_id], (err, result) => {
         if (err) console.log(err);
     });
     db.query(newsqlfarmcontactupdate, [contact_person_name, position, contact_num, contact_email, farm_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.put('/farmimgmapupdate',upload.single('profileImg'), (req,res) => {
+    const farm_id = req.body.farm_id;
+    const img_map = req.file.buffer.toString('base64')
+    const sqlUpdate = "UPDATE social_info SET img_map = ? WHERE farm_id = ?";
+    db.query(sqlUpdate, [img_map, farm_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.put('/farmgooglemapupdate',upload.single('profileImg'), (req,res) => {
+    const farm_id = req.body.farm_id;
+    const google_map = req.file.buffer.toString('base64')
+    const sqlUpdate = "UPDATE social_info SET google_map = ? WHERE farm_id = ?";
+    db.query(sqlUpdate, [google_map, farm_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.put('/farmorgchartupdate',upload.single('profileImg'), (req,res) => {
+    const farm_id = req.body.farm_id;
+    const org_chart = req.file.buffer.toString('base64')
+    const sqlUpdate = "UPDATE social_info SET org_chart = ? WHERE farm_id = ?";
+    db.query(sqlUpdate, [org_chart, farm_id], (err, result) => {
         if (err) console.log(err);
     });
 })
@@ -596,17 +679,19 @@ app.put('/ownersupdate', (req,res) => {
     const educational_attainment = req.body.educational_attainment
     const position = req.body.position
     const job_desc = req.body.job_desc
+    const block = req.body.block
     const lot = req.body.lot
     const street = req.body.street
+    const barangay = req.body.barangay
     const city = req.body.city
     const province = req.body.province
     const zipcode = req.body.zipcode
     const newsqlownerupdate = "UPDATE owners SET owner_name = ? , contact_num = ?, contact_email = ?, owner_type = ? , educational_attainment = ?, position = ?, job_desc = ? WHERE owner_id = ?";
-    const newsqlowneraddressupdate = "UPDATE address SET lot = ? , street = ?, city = ?, province = ? , zipcode = ? WHERE owner_id = ?";
+    const newsqlowneraddressupdate = "UPDATE address SET block = ?, lot = ? , street = ?, barangay = ?, city = ?, province = ? , zipcode = ? WHERE owner_id = ?";
     db.query(newsqlownerupdate, [owner_name, contact_num, contact_email, owner_type, educational_attainment, position, job_desc, owner_id], (err, result) => {
         if (err) console.log(err);
     });
-    db.query(newsqlowneraddressupdate, [lot, street, city, province, zipcode, owner_id], (err, result) => {
+    db.query(newsqlowneraddressupdate, [block, lot, street, barangay, city, province, zipcode, owner_id], (err, result) => {
         if (err) console.log(err);
     });
 })
@@ -814,7 +899,6 @@ app.post("/harvestinputmortalities", async function (req,res){
     db.query(sqlInsertharvestsurvivalupdate,[survival_rate, activities_id], (err, result) =>{
         if (err) console.log(err)
         console.log(result)
-        console.log("q1: ", quanti1)
         console.log("q2: ", quanti2)
         console.log("survival_rate: ", survival_rate)
     })
@@ -992,14 +1076,16 @@ app.post('/suppliersadd', async function (req,res) {
     const position = req.body.position
     const contact_num = req.body.contact_num
     const contact_email = req.body.contact_email
+    const block = req.body.block
     const lot = req.body.lot
     const street = req.body.street
+    const barangay = req.body.barangay
     const city = req.body.city
     const province = req.body.province
     const zipcode = req.body.zipcode
     var supplier_id
     const sqlsupplierprofile = "INSERT INTO supplier_profile (company_name) VALUES (?);"
-    const sqlInsertsupplieradress = "INSERT INTO address (supplier_id, lot, street, city, province, zipcode) VALUES (?,?,?,?,?,?);"
+    const sqlInsertsupplieradress = "INSERT INTO address (supplier_id, block, lot, street, barangay, city, province, zipcode) VALUES (?,?,?,?,?,?,?,?);"
     const sqlInsertsuppliercontact = "INSERT INTO contact_info (supplier_id, contact_person_name, position, contact_num, contact_email) VALUES (?,?,?,?,?);"
     function addsupplier(){
         return new Promise ((resolve, reject) => {
@@ -1014,7 +1100,7 @@ app.post('/suppliersadd', async function (req,res) {
         })
     }
     supplier_id = await addsupplier();
-    db.query(sqlInsertsupplieradress,[supplier_id, lot, street, city, province, zipcode], (err, result) =>{
+    db.query(sqlInsertsupplieradress,[supplier_id, block, lot, street, barangay, city, province, zipcode], (err, result) =>{
         if(err) console.log(err)
     })
     db.query(sqlInsertsuppliercontact,[supplier_id, contact_person_name, position, contact_num, contact_email], (err, result) =>{
@@ -1067,18 +1153,20 @@ app.put('/suppliersupdate', (req,res) => {
     const position = req.body.position
     const contact_num = req.body.contact_num
     const contact_email = req.body.contact_email
+    const block = req.body.block
     const lot = req.body.lot
     const street = req.body.street
+    const barangay = req.body.barangay
     const city = req.body.city
     const province = req.body.province
     const zipcode = req.body.zipcode
     const newsqlsupplier = "UPDATE supplier_profile SET company_name = ? WHERE supplier_id = ?";
-    const newsqlsupplieraddress = "UPDATE address SET lot = ?, street = ?, city = ?, province = ?, zipcode = ? WHERE supplier_id = ?";
+    const newsqlsupplieraddress = "UPDATE address SET block = ?, lot = ?, street = ?, barangay = ?, city = ?, province = ?, zipcode = ? WHERE supplier_id = ?";
     const newsqlsuppliercontactinfo = "UPDATE contact_info SET contact_person_name = ?, position = ?, contact_num = ?, contact_email = ? WHERE supplier_id = ?";
     db.query(newsqlsupplier, [company_name, supplier_id], (err, result) => {
         if (err) console.log(err);
     });
-    db.query(newsqlsupplieraddress, [lot, street, city, province, zipcode, supplier_id], (err, result) => {
+    db.query(newsqlsupplieraddress, [block, lot, street, barangay, city, province, zipcode, supplier_id], (err, result) => {
         if (err) console.log(err);
     });
     db.query(newsqlsuppliercontactinfo, [contact_person_name, position, contact_num, contact_email, supplier_id], (err, result) => {
