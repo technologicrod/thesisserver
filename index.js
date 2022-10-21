@@ -90,7 +90,8 @@ app.post("/auth", (req,res) => {
 app.get("/", (req, res) => {
     if (req) {
 		res.send(un);
-        console.log("uno", un)
+        console.log("username", un)
+        console.log("account type", at)
 	} else {
 		res.send('Please login to view this page!');
 	}
@@ -302,6 +303,51 @@ app.post("/plantutilitiesotherexpensesadd", (req,res) => {
     const otherexpensesname = req.body.otherexpensesname
     const sqlInsertotherexpenses = "INSERT INTO plantutilitiesotherexpensesprofiles (otherexpensesname) VALUES (?);"
     db.query(sqlInsertotherexpenses,[otherexpensesname], (err, result) =>{
+        console.log(result);
+        console.log(result.insertId);
+        res.json({ insertId: result.insertId })
+    })
+})
+app.get("/plantutilitiesunitsofmeasurement", (req,res) => {
+    const sqlSelectunits = "SELECT * FROM plantutilitiesunitofmeasurement;"
+    db.query(sqlSelectunits, (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/plantutilitiesunitsofmeasurementadd", (req,res) => {
+    const unit_name = req.body.unit_name
+    const sqlInsertunits = "INSERT INTO plantutilitiesunitofmeasurement (unit_name) VALUES (?);"
+    db.query(sqlInsertunits,[unit_name], (err, result) =>{
+        console.log(result);
+        console.log(result.insertId);
+        res.json({ insertId: result.insertId })
+    })
+})
+app.get("/plantutilitiespaymentmethod", (req,res) => {
+    const sqlSelectpm = "SELECT * FROM plantutilitiespaymentmethod;"
+    db.query(sqlSelectpm, (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/plantutilitiespaymentmethodadd", (req,res) => {
+    const paymentmethod_name = req.body.paymentmethod_name
+    const sqlInsertpm = "INSERT INTO plantutilitiespaymentmethod (paymentmethod_name) VALUES (?);"
+    db.query(sqlInsertpm,[paymentmethod_name], (err, result) =>{
+        console.log(result);
+        console.log(result.insertId);
+        res.json({ insertId: result.insertId })
+    })
+})
+app.get("/plantutilitiesitemcategory", (req,res) => {
+    const sqlSelectic = "SELECT * FROM plantutilitiesitemcategory;"
+    db.query(sqlSelectic, (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/plantutilitiesitemcategoryadd", (req,res) => {
+    const itemcategory_name = req.body.itemcategory_name
+    const sqlInsertic = "INSERT INTO plantutilitiesitemcategory (itemcategory_name) VALUES (?);"
+    db.query(sqlInsertic,[itemcategory_name], (err, result) =>{
         console.log(result);
         console.log(result.insertId);
         res.json({ insertId: result.insertId })
@@ -730,14 +776,37 @@ app.get("/plantbatchinfo/:batch_id", (req,res) => {
         res.send(result);
     })
 })
-app.post("/plantbatchadd", (req,res) => {
+app.post("/plantbatchadd", async function (req,res) {
     const plantid = req.body.plantid
     const batchstatus = req.body.batchstatus
     const periodstart = req.body.periodstart
-    const periodend = req.body.periodend
+    var periodend
     const quantity = req.body.quantity
     const measurement = req.body.measurement
     const sqlInsertplantbatch= "INSERT INTO plant_batch (plant_id, batch_status, farm_period_start, expected_harvest_period, quantity, measurement) VALUES (?,?,?,?,?,?);"
+    const sqlSelectplantprofile = "SELECT * FROM plant_profile WHERE plant_id = ?;"
+    var months
+    
+    function getMonth(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlSelectplantprofile,[plantid], (err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result[0].num_of_mon_to_harvest);
+                  }
+            })
+        })
+    }
+    months = await getMonth()
+    months = parseInt(months)
+    //periodend = periodstart.setMonth(periodstart.getMonth()+months);
+    let newmonths = new Date (periodstart)
+    let monthint = newmonths.getMonth()
+    monthint = parseInt(monthint)
+    let another = monthint + months
+    periodend = new Date(newmonths.setMonth(another))
     db.query(sqlInsertplantbatch,[plantid, batchstatus, periodstart, periodend, quantity, measurement], (err, result) =>{
         console.log(result);
     })
@@ -849,15 +918,14 @@ app.post("/harvestinputmortalities", async function (req,res){
     const activities_id = req.body.activities_id
     const batch_id = req.body.batch_id
     var quantity_loss = req.body.quantity_loss
-    const units = req.body.units
     const date = req.body.date
     var oldquanti, newquanti, quanti2, survival_rate
-    const sqlInsertharvestmortalities= "INSERT INTO mortalities (activities_id, batch_id, quantity_loss, units, date) VALUES (?,?,?,?,?);"
+    const sqlInsertharvestmortalities= "INSERT INTO mortalities (activities_id, batch_id, quantity_loss, date) VALUES (?,?,?,?);"
     const sqlInsertharvestquantityupdate = "UPDATE plant_monitoring SET quantity = ?  WHERE activities_id = ?";
     const sqlInsertharvestsurvivalupdate = "UPDATE plant_monitoring SET survival_rate = ?  WHERE activities_id = ?";
     const sqlselectactivity = "SELECT * FROM plant_monitoring WHERE activities_id = ?";
     const sqlselectbatch = "SELECT * FROM plant_batch WHERE batch_id = ?";
-    db.query(sqlInsertharvestmortalities,[activities_id, batch_id, quantity_loss, units, date], (err, result) =>{
+    db.query(sqlInsertharvestmortalities,[activities_id, batch_id, quantity_loss, date], (err, result) =>{
         if (err) console.log(err)
         console.log(result)
     })
@@ -930,22 +998,23 @@ app.post("/harvestinputactivity", (req,res) => { //TO BE EDIT WITH INVENTORY CON
         console.log(result)
     })
 })
-app.post("/harvestbatchinput", (req,res) => {
+app.post("/harvestbatchinput",upload.single('profileImg'), (req,res) => {
     const batch_id = req.body.batch_id
-    const batch_img = req.body.batch_img
-    const batch_vid = req.body.batch_vid
+    const batch_img = req.file.buffer.toString('base64')
     const date_harvested = req.body.date_harvested
     const batch_quality = req.body.batch_quality
     const remarks = req.body.remarks
     const batch_status = req.body.batch_status
-    const sqlInsertharvestbatch = "INSERT INTO batch_harvest (batch_id, batch_img, batch_vid, date_harvested, batch_quality, remarks, batch_status) VALUES (?,?,?,?,?,?,?);"
+    const sqlInsertharvestbatch = "INSERT INTO batch_harvest (batch_id, batch_img, date_harvested, batch_quality, remarks, batch_status) VALUES (?,?,?,?,?,?);"
     const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
-    db.query(sqlInsertharvestbatch,[batch_id, batch_img, batch_vid, date_harvested, batch_quality, remarks, batch_status], (err, result) =>{
+    db.query(sqlInsertharvestbatch,[batch_id, batch_img, date_harvested, batch_quality, remarks, batch_status], (err, result) =>{
         console.log(result);
+        if(err) console.log(err)
     })
     db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
         console.log(batch_id)
         console.log(batch_status)
+        if(err) console.log(err)
     });
 })
 app.get('/harvestinventoryonsalebatches', (req, res) => {
@@ -1031,14 +1100,14 @@ app.get('/harvestvariationslist/:var_status', (req, res) => {
 })
 app.post("/iteminventoryadd", (req,res) => {
     const supply_name = req.body.supply_name
-    const farm_id = req.body.farm_id
+    const category = req.body.category
     const units = req.body.units
     const perishability = req.body.perishability
     const re_order_lvl = req.body.re_order_lvl
     const description = req.body.description
     const quantity = req.body.quantity
-    const sqlInsertiteminventory= "INSERT INTO supplies (farm_id, supply_name, units, description, perishability, re_order_lvl, quantity) VALUES (?,?,?,?,?,?,?);"
-    db.query(sqlInsertiteminventory,[farm_id, supply_name, units, description, perishability, re_order_lvl, quantity], (err, result) =>{
+    const sqlInsertiteminventory= "INSERT INTO supplies (category, supply_name, units, description, perishability, re_order_lvl, quantity) VALUES (?,?,?,?,?,?,?);"
+    db.query(sqlInsertiteminventory,[category, supply_name, units, description, perishability, re_order_lvl, quantity], (err, result) =>{
         if (err) console.log(err)
         console.log(result)
     })
@@ -1060,13 +1129,13 @@ app.get('/iteminventoryinfo/:supply_id', (req, res) => {
 app.put('/iteminventoryupdate', (req,res) => {
     const supply_id = req.body.supply_id
     const supply_name = req.body.supply_name
-    const farm_id = req.body.farm_id
+    const category = req.body.category
     const units = req.body.units
     const perishability = req.body.perishability
     const re_order_lvl = req.body.re_order_lvl
     const description = req.body.description
-    const newsqlitemupdate = "UPDATE supplies SET supply_name = ?, farm_id = ?, units = ?, perishability = ?, re_order_lvl = ?, description = ? WHERE supply_id = ?";
-    db.query(newsqlitemupdate, [supply_name, farm_id, units, perishability, re_order_lvl, description, supply_id], (err, result) => {
+    const newsqlitemupdate = "UPDATE supplies SET supply_name = ?, category = ?, units = ?, perishability = ?, re_order_lvl = ?, description = ? WHERE supply_id = ?";
+    db.query(newsqlitemupdate, [supply_name, category, units, perishability, re_order_lvl, description, supply_id], (err, result) => {
         if (err) console.log(err);
     });
 })
@@ -1254,7 +1323,7 @@ app.get('/purchaseorderconfirmedlist/:po_status', (req, res) => {
 })
 app.get('/purchaseorderconfirmedinfo/:final_po_id', (req, res) => {
     const final_po_id = req.params.final_po_id
-    const sqlpoconfirmedinfo = "SELECT * FROM final_po WHERE final_po_id = ?;"
+    const sqlpoconfirmedinfo = "SELECT * FROM final_po INNER JOIN supplier_profile ON final_po.supplier_id=supplier_profile.supplier_id WHERE final_po_id = ?;"
     db.query(sqlpoconfirmedinfo, final_po_id, (err, result) =>{
         res.json(result);
     })
@@ -1333,10 +1402,11 @@ app.post('/purchaseorderstockin', async function (req,res) {
     const units = req.body.units
     var stocked_in_quantity = req.body.stocked_in_quantity
     var po_quantity = req.body.po_quantity
+    var date = req.body.date
     var po_status = "Partly Stocked In"
     var quantinew, quantiold, quantitotal
     var quantiinput = 0
-    const newsqlpostockin = "UPDATE purchase_order SET status = ?, stocked_in_quantity = ? WHERE po_id = ?";
+    const newsqlpostockin = "UPDATE purchase_order SET status = ?, stocked_in_quantity = ?, date = ? WHERE po_id = ?";
     const sqlquantiinfo = "SELECT * FROM supplies WHERE supply_id = ?;"
     const newsqlquantistockin = "UPDATE supplies SET quantity = ? WHERE supply_id = ?";
     if (stocked_in_quantity === null){
@@ -1368,13 +1438,15 @@ app.post('/purchaseorderstockin', async function (req,res) {
     quantiinput = stocked_in_quantity + quantity
     if (po_quantity == quantiinput){
         po_status = "Stocked In"
-        db.query(newsqlpostockin, [po_status, quantiinput, po_id], (err, result) => {
+        db.query(newsqlpostockin, [po_status, quantiinput, date, po_id], (err, result) => {
             if (err) console.log(err);
+            console.log(result)
         });
     }
     else{
-        db.query(newsqlpostockin, [po_status, quantiinput, po_id], (err, result) => {
+        db.query(newsqlpostockin, [po_status, quantiinput, date, po_id], (err, result) => {
             if (err) console.log(err);
+            console.log(result)
         });
     }
     console.log("po_id :", po_id)
@@ -1741,6 +1813,20 @@ app.get("/purchaseorderexpenses", (req,res) => {
     const sqlSelectpoexpenses = "SELECT * FROM payment_for_po;"
     db.query(sqlSelectpoexpenses, (err, result) =>{
         res.send(result);
+    })
+})
+app.get('/redeliverylist', (req, res) => {
+    const sqlSelectred = "SELECT * FROM redelivery INNER JOIN supplies ON redelivery.supply_id=supplies.supply_id INNER JOIN purchase_order ON redelivery.po_id=purchase_order.po_id INNER JOIN supplier_profile ON purchase_order.supplier_id=supplier_profile.supplier_id;"
+    db.query(sqlSelectred, (err, result) =>{
+        res.send(result);
+        console.log(result)
+    })
+})
+app.get('/redefundlist', (req, res) => {
+    const sqlSelectref = "SELECT *, refund.date as refunddate FROM refund INNER JOIN supplies ON refund.supply_id=supplies.supply_id INNER JOIN purchase_order ON refund.po_id=purchase_order.po_id INNER JOIN supplier_profile ON purchase_order.supplier_id=supplier_profile.supplier_id;"
+    db.query(sqlSelectref, (err, result) =>{
+        res.send(result);
+        console.log(result)
     })
 })
 //crud test
