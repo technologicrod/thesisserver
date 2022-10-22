@@ -27,7 +27,7 @@ app.use(session({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'static')));
-var un, at //for username and account type
+let un, at //for username and account type
 /*const db = mysql.createPool({
     host: '192.168.254.111',
     user: 'rjatalo',
@@ -68,7 +68,7 @@ app.post("/auth", (req,res) => {
     const sqlInsert = "SELECT * FROM employee_accounts WHERE username = ? AND pass = ?;"
     un = ""
     at = ""
-    var unl = 0
+    var unl
     db.query(sqlInsert,[username, pass], (err, result) =>{
         console.log("reso: ",result, result.length);
         unl = result.length
@@ -450,8 +450,9 @@ app.get("/employeesaccount", (req,res) => {
     })
 })
 app.get("/employeesaccountfilter", (req,res) => {
-    const sqlSelectemployeesaccountfilter = "SELECT * FROM employees WHERE employees.emp_id NOT IN (SELECT employee_accounts.emp_id FROM employee_accounts);"
-    db.query(sqlSelectemployeesaccountfilter, (err, result) =>{
+    const blank = ""
+    const sqlSelectemployeesaccountfilter = "SELECT * FROM employees WHERE employees.emp_id NOT IN (SELECT employee_accounts.emp_id FROM employee_accounts WHERE employee_accounts.emp_id != ?);"
+    db.query(sqlSelectemployeesaccountfilter, blank,(err, result) =>{
         res.send(result);
     })
 })
@@ -743,7 +744,7 @@ app.put('/ownersupdate', (req,res) => {
 })
 app.get("/plantbatchlist/:batch_status", (req,res) => {
     const batch_status = req.params.batch_status;
-    const sqlSelectbatch = "SELECT * FROM plant_batch INNER JOIN plant_profile ON plant_batch.plant_id = plant_profile.plant_id WHERE plant_batch.batch_status = ?;"
+    const sqlSelectbatch = "SELECT * FROM plant_batch INNER JOIN plant_profile ON plant_batch.plant_id = plant_profile.plant_id INNER JOIN farm_areas ON plant_batch.area_id=farm_areas.area_id WHERE plant_batch.batch_status = ?;"
     db.query(sqlSelectbatch, batch_status, (err, result) =>{
         res.send(result);
     })
@@ -771,19 +772,19 @@ app.get("/plantbatchlatestinfo/:batch_id", (req,res) => {
 })
 app.get("/plantbatchinfo/:batch_id", (req,res) => {
     const batch_id = req.params.batch_id;
-    const sqlSelectbatchinfo = "SELECT * FROM plant_batch WHERE batch_id = ?;"
+    const sqlSelectbatchinfo = "SELECT * FROM plant_batch INNER JOIN farm_areas ON plant_batch.area_id=farm_areas.area_id WHERE batch_id = ?;"
     db.query(sqlSelectbatchinfo,batch_id, (err, result) =>{
         res.send(result);
     })
 })
 app.post("/plantbatchadd", async function (req,res) {
     const plantid = req.body.plantid
+    const area_id = req.body.area_id
     const batchstatus = req.body.batchstatus
     const periodstart = req.body.periodstart
     var periodend
     const quantity = req.body.quantity
-    const measurement = req.body.measurement
-    const sqlInsertplantbatch= "INSERT INTO plant_batch (plant_id, batch_status, farm_period_start, expected_harvest_period, quantity, measurement) VALUES (?,?,?,?,?,?);"
+    const sqlInsertplantbatch= "INSERT INTO plant_batch (plant_id, area_id, batch_status, farm_period_start, expected_harvest_period, quantity) VALUES (?,?,?,?,?,?);"
     const sqlSelectplantprofile = "SELECT * FROM plant_profile WHERE plant_id = ?;"
     var months
     
@@ -807,15 +808,16 @@ app.post("/plantbatchadd", async function (req,res) {
     monthint = parseInt(monthint)
     let another = monthint + months
     periodend = new Date(newmonths.setMonth(another))
-    db.query(sqlInsertplantbatch,[plantid, batchstatus, periodstart, periodend, quantity, measurement], (err, result) =>{
+    db.query(sqlInsertplantbatch,[plantid, area_id, batchstatus, periodstart, periodend, quantity], (err, result) =>{
         console.log(result);
     })
 })
 app.put('/plantbatchedit', (req,res) => {
     const batch_id = req.body.batch_id
+    const area_id = req.body.area_id
     const batch_status = req.body.batch_status
-    const newsqlplantbatchupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
-    db.query(newsqlplantbatchupdate, [batch_status, batch_id], (err, result) => {
+    const newsqlplantbatchupdate = "UPDATE plant_batch SET area_id = ?, batch_status = ?  WHERE batch_id = ?";
+    db.query(newsqlplantbatchupdate, [area_id, batch_status, batch_id], (err, result) => {
         if (err) console.log(err);
         console.log(batch_id)
         console.log(batch_status)
@@ -1006,16 +1008,16 @@ app.post("/harvestbatchinput",upload.single('profileImg'), (req,res) => {
     const remarks = req.body.remarks
     const batch_status = req.body.batch_status
     const sqlInsertharvestbatch = "INSERT INTO batch_harvest (batch_id, batch_img, date_harvested, batch_quality, remarks, batch_status) VALUES (?,?,?,?,?,?);"
-    const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
+    //const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
     db.query(sqlInsertharvestbatch,[batch_id, batch_img, date_harvested, batch_quality, remarks, batch_status], (err, result) =>{
         console.log(result);
         if(err) console.log(err)
     })
-    db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
+    /*db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
         console.log(batch_id)
         console.log(batch_status)
         if(err) console.log(err)
-    });
+    });*/
 })
 app.get('/harvestinventoryonsalebatches', (req, res) => {
     const sqlharvestonsaleinfo = "SELECT * FROM batch_harvest;"
@@ -1052,7 +1054,7 @@ app.post("/harvestinputvariations", (req,res) => {
     const batch_id = req.body.batch_id
     const var_status = "Active"
     const sqlInsertvariations = "INSERT INTO batch_quantity_variations (harvest_id, grade, quantity_harvested, units, price_per_unit, var_status) VALUES (?,?,?,?,?,?);"
-    const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
+    //const sqlInsertharveststatusupdate = "UPDATE plant_batch SET batch_status = ?  WHERE batch_id = ?";
     const sqlInsertharveststatusupdateinharvest = "UPDATE batch_harvest SET batch_status = ?  WHERE harvest_id = ?";
     if (a_quantity_harvested, a_units, a_price_per_unit != ""){
         db.query(sqlInsertvariations,[harvest_id, a_grade, a_quantity_harvested, a_units, a_price_per_unit, var_status], (err, result) =>{
@@ -1074,10 +1076,10 @@ app.post("/harvestinputvariations", (req,res) => {
             console.log(result);
         })
     }
-    db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
+    /*db.query(sqlInsertharveststatusupdate, [batch_status, batch_id], (err, result) => {
         console.log(batch_id)
         console.log(batch_status)
-    });
+    }); */
     db.query(sqlInsertharveststatusupdateinharvest, [batch_status, harvest_id], (err, result) => {
         console.log(batch_id)
         console.log(batch_status)
@@ -1810,7 +1812,7 @@ app.put('/otherexpensesupdate', (req,res) => {
     });
 })
 app.get("/purchaseorderexpenses", (req,res) => {
-    const sqlSelectpoexpenses = "SELECT * FROM payment_for_po;"
+    const sqlSelectpoexpenses = "SELECT * FROM payment_for_po INNER JOIN final_po ON payment_for_po.final_po_id=final_po.final_po_id INNER JOIN supplier_profile ON final_po.supplier_id=supplier_profile.supplier_id;"
     db.query(sqlSelectpoexpenses, (err, result) =>{
         res.send(result);
     })
@@ -1827,6 +1829,118 @@ app.get('/redefundlist', (req, res) => {
     db.query(sqlSelectref, (err, result) =>{
         res.send(result);
         console.log(result)
+    })
+})
+app.put('/expireditems', async function (req,res) {
+    let today = new Date();
+    const status = "Expired";
+    const sqlSelectitems1 = "SELECT * FROM perishable_items"
+    var itemslength
+    const sqlSelectitems = "SELECT * FROM perishable_items WHERE perishable_items_id = ?;"
+    const sqlUpdateexpired = "UPDATE perishable_items SET status = ? WHERE perishable_items_id = ?";
+    function getinfo1(){
+        return new Promise ((resolve, reject) => {
+            db.query(sqlSelectitems1,(err, result) =>{
+                if (err) {
+                    reject(err);
+                  }
+                  else {
+                    resolve(result.length);
+                  }
+            })
+        })
+    }
+    itemslength = await getinfo1();
+    for (let i = 1; i <= itemslength; i++){
+        db.query(sqlSelectitems, [i], (err, result) => {
+            let oldstatus = result[0].status
+            let exp_date = result[0].exp_date
+            let today = new Date()
+            exp_date = new Date(exp_date)
+            //exp_date = exp_date.valueOf()
+            //today = today.valueOf()
+            //exp_date = (new Date(exp_date)).toLocaleDateString();
+            //today = (new Date(today)).toLocaleDateString();
+            if (exp_date <= today){
+                db.query(sqlUpdateexpired,[status, i],(err, result) =>{
+                    if(err) console.log(err)
+                })
+            }
+            
+        });
+    }
+})
+app.get("/batchvariationsprice/:quantity_id", (req,res) => {
+    const quantity_id = req.params.quantity_id
+    const sqlSelectvariations = "SELECT * FROM batch_quantity_variations WHERE quantity_id = ?;"
+    db.query(sqlSelectvariations,quantity_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.put('/batchvariationspriceedit', (req,res) => {
+    const price_per_unit = req.body.price_per_unit;
+    const quantity_id = req.body.quantity_id;
+    const sqlUpdateprice = "UPDATE batch_quantity_variations SET price_per_unit = ? WHERE quantity_id = ?";
+    db.query(sqlUpdateprice, [price_per_unit, quantity_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.get("/farmareas/:farm_id", (req,res) => {
+    const farm_id = req.params.farm_id;
+    const sqlSelectareas = "SELECT * FROM farm_areas WHERE farm_id = ?;"
+    db.query(sqlSelectareas, farm_id, (err, result) =>{
+        res.send(result);
+    })
+})
+app.get("/farmareaslist", (req,res) => {
+    const sqlSelectareaslist = "SELECT * FROM farm_areas;"
+    db.query(sqlSelectareaslist, (err, result) =>{
+        res.send(result);
+    })
+})
+app.post("/farmareasadd", (req,res) => {
+    const farm_id = req.body.farm_id
+    const area_name = req.body.area_name
+    const soil_type = req.body.soil_type
+    const size = req.body.size
+    const sqlInsertareas = "INSERT INTO farm_areas (farm_id, area_name, soil_type, size) VALUES (?,?,?,?);"
+    db.query(sqlInsertareas,[farm_id, area_name, soil_type, size], (err, result) =>{
+        console.log(result);
+        if(err) console.log(err)
+    })
+})
+app.get("/farmareasinfo/:area_id", (req,res) => {
+    const area_id = req.params.area_id;
+    const sqlSelectareasinfo = "SELECT * FROM farm_areas WHERE area_id = ?;"
+    db.query(sqlSelectareasinfo, area_id, (err, result) =>{
+        res.send(result);
+        console.log(result)
+    })
+})
+app.put('/farmareasupdate', (req,res) => {
+    const area_id = req.body.area_id
+    const area_name = req.body.area_name
+    const soil_type = req.body.soil_type
+    const size = req.body.size
+    const sqlUpdateareas = "UPDATE farm_areas SET area_name = ?, soil_type = ?, size = ? WHERE area_id = ?";
+    db.query(sqlUpdateareas, [area_name, soil_type, size, area_id], (err, result) => {
+        if (err) console.log(err);
+    });
+})
+app.get("/searchidfarmareas/:area_id", (req,res) => {
+    const area_id = req.params.area_id
+    const sqlSelect = "SELECT * FROM farm_areas WHERE area_id = ?;"
+    db.query(sqlSelect,area_id, (err, result) =>{
+        res.send(result);
+        if(err) console.log(err)
+        console.log("id", result)
+    })
+})
+app.get("/searchnamefarmareas/:area_name", (req,res) => {
+    const area_name = req.params.area_name
+    const sqlSelect = "SELECT * FROM farm_areas WHERE area_name = ?;"
+    db.query(sqlSelect,area_name, (err, result) =>{
+        res.send(result);
     })
 })
 //crud test
